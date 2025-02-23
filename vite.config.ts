@@ -1,6 +1,19 @@
-import { defineConfig } from 'vite';
+import { defineConfig, ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
+
+const proxyConfig: Record<string, ProxyOptions> = {
+  '/auth': {
+    target: 'https://app-tigsgeal.fly.dev',
+    changeOrigin: true,
+    secure: false
+  },
+  '/api': {
+    target: 'https://app-tigsgeal.fly.dev',
+    changeOrigin: true,
+    secure: false
+  }
+};
 
 export default defineConfig({
   plugins: [react()],
@@ -9,20 +22,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    proxy: {
-      '/auth': {
-        target: 'https://app-tigsgeal.fly.dev',
-        changeOrigin: true,
-        secure: false,
-        credentials: true
-      },
-      '/api': {
-        target: 'https://app-tigsgeal.fly.dev',
-        changeOrigin: true,
-        secure: false,
-        credentials: true
-      }
-    }
+    proxy: proxyConfig
   },
   resolve: {
     alias: {
