@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithRedirect, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithRedirect as signInWithRedirectAuth, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../firebase';
 
 export default function LoginPage() {
@@ -12,7 +12,7 @@ export default function LoginPage() {
       setError(null);
       const provider = new GoogleAuthProvider();
       // Use redirect instead of popup
-      await signInWithRedirect(auth, provider);
+      await signInWithRedirectAuth(auth, provider);
     } catch (error) {
       console.error('Login error:', error);
       setError('ログインに失敗しました。もう一度お試しください。');
