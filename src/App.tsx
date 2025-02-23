@@ -6,7 +6,7 @@ import { PrivateRoute } from './components/PrivateRoute';
 import { PublicRoute } from './components/PublicRoute';
 import React from 'react';
 
-function AppRoutes() {
+const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -15,7 +15,7 @@ function AppRoutes() {
   );
 }
 
-export default function App() {
+const App: React.FC = () => {
   return (
     <Router>
       <AuthProvider>
