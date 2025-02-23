@@ -1,4 +1,4 @@
-import React from 'react';
+/** @jsxImportSource react */
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
