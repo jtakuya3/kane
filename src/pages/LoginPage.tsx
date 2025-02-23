@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import type { AuthError } from '../types';
 
 export default function LoginPage() {
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -16,7 +18,7 @@ export default function LoginPage() {
       const user = result.user;
 
       // セッション設定
-      const response = await fetch('/api/auth/verify', {
+      const response = await fetch('https://app-tigsgeal.fly.dev/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,6 +33,8 @@ export default function LoginPage() {
       if (!response.ok) {
         throw new Error('認証に失敗しました');
       }
+      
+      navigate('/select');
     } catch (error) {
       console.error('Googleログインエラー:', error);
       const authError = error as AuthError;
