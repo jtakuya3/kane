@@ -3,7 +3,7 @@ import type { AuthResponse, Chatbot, ChatResponse } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.PROD 
-    ? "https://app-xdkmjejd.fly.dev"
+    ? "https://app-tigsgeal.fly.dev"
     : "http://localhost:8000",
   headers: {
     "Content-Type": "application/json",
