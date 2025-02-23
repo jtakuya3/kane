@@ -21,6 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
+      
+      // 認証状態の監視
+      if (user && window.location.pathname === '/') {
+        window.location.href = '/select';
+      }
     });
 
     return () => unsubscribe();
