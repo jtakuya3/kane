@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 
 interface AuthContextType {
@@ -24,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // 認証状態の監視
       if (user && window.location.pathname === '/') {
-        window.location.href = '/select';
+        navigate('/select');
       }
     });
 
