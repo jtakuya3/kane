@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import type { AuthError } from '../types';
 
-export default function LoginPage() {
+const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -90,3 +90,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+export default LoginPage;
