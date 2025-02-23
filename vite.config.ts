@@ -8,12 +8,20 @@ export default defineConfig({
     include: ['firebase/app', 'firebase/auth']
   },
   server: {
+    host: true,
     proxy: {
+      '/auth': {
+        target: 'https://app-tigsgeal.fly.dev',
+        changeOrigin: true,
+        secure: false,
+        credentials: true
+      },
       '/api': {
         target: 'https://app-tigsgeal.fly.dev',
         changeOrigin: true,
         secure: false,
-      },
+        credentials: true
+      }
     },
   },
   resolve: {
