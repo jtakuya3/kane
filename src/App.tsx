@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import SelectPage from './pages/SelectPage';
 import { PrivateRoute } from './components/PrivateRoute';
 import { PublicRoute } from './components/PublicRoute';
+import React from 'react';
 
 function AppRoutes() {
   return (
