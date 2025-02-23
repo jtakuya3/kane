@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { chatbots } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { Chatbot } from '../types';
 
 export default function SelectPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [bots, setBots] = useState<Record<string, Chatbot>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) {
+      navigate('/');
+      return;
+    }
+
     const loadBots = async () => {
       try {
         setLoading(true);
@@ -21,7 +30,7 @@ export default function SelectPage() {
       }
     };
     loadBots();
-  }, []);
+  }, [user, navigate]);
 
   if (loading) {
     return (
