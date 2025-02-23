@@ -1,5 +1,4 @@
 import React from 'react';
-import type { ReactElement } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -7,7 +6,7 @@ import SelectPage from './pages/SelectPage';
 import { PrivateRoute } from './components/PrivateRoute';
 import { PublicRoute } from './components/PublicRoute';
 
-const AppRoutes = (): ReactElement => {
+const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -16,7 +15,7 @@ const AppRoutes = (): ReactElement => {
   );
 };
 
-const App = (): ReactElement => {
+const App = () => {
   return (
     <Router>
       <AuthProvider>
