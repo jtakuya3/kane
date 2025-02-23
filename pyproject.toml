@@ -6,6 +6,11 @@ authors = ["Takuya Kanesaki"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+uvicorn = "^0.34.0"
+fastapi = "^0.115.8"
+python-dotenv = "^1.0.1"
+pyjwt = "^2.10.1"
+httpx = "^0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
