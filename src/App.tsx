@@ -4,9 +4,8 @@ import LoginPage from './pages/LoginPage';
 import SelectPage from './pages/SelectPage';
 import { PrivateRoute } from './components/PrivateRoute';
 import { PublicRoute } from './components/PublicRoute';
-import React from 'react';
 
-const AppRoutes = () => {
+const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -15,7 +14,7 @@ const AppRoutes = () => {
   );
 };
 
-const App = () => {
+const App: React.FC = () => {
   return (
     <Router>
       <AuthProvider>
