@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, onAuthStateChanged, getRedirectResult as getRedirectResultAuth } from 'firebase/auth';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 
 interface AuthContextType {
@@ -18,12 +18,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Handle redirect result
-    getRedirectResultAuth(auth)
-      .catch((error: Error) => {
-        console.error('Redirect error:', error);
-      });
-
     // Monitor auth state
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
