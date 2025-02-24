@@ -1,23 +1,24 @@
 import { defineConfig, loadEnv } from 'vite';
-import type { ProxyOptions, UserConfigExport } from 'vite';
+import type { ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
 
-export default defineConfig(({ mode }): UserConfigExport => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   
-  if (!env.VITE_API_BASE_URL) {
-    throw new Error('VITE_API_BASE_URL must be set');
+  const apiBaseUrl = env.VITE_API_BASE_URL;
+  if (!apiBaseUrl) {
+    console.warn('Warning: VITE_API_BASE_URL is not set');
   }
 
   const proxy: Record<string, ProxyOptions> = {
     '/auth': {
-      target: env.VITE_API_BASE_URL,
+      target: apiBaseUrl || 'http://localhost:8000',
       changeOrigin: true,
       secure: false
     },
     '/api': {
-      target: env.VITE_API_BASE_URL,
+      target: apiBaseUrl || 'http://localhost:8000',
       changeOrigin: true,
       secure: false
     }
