@@ -3,16 +3,16 @@ import react from '@vitejs/plugin-react';
 import * as path from 'path';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
   
   const proxyConfig: Record<string, ProxyOptions> = {
     '/auth': {
-      target: env.VITE_API_BASE_URL,
+      target: env.VITE_API_BASE_URL || '',
       changeOrigin: true,
       secure: false
     },
     '/api': {
-      target: env.VITE_API_BASE_URL,
+      target: env.VITE_API_BASE_URL || '',
       changeOrigin: true,
       secure: false
     }
