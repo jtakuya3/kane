@@ -1,4 +1,4 @@
-import { defineConfig, ProxyOptions, loadEnv } from 'vite';
+import { defineConfig, loadEnv, ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
 
@@ -9,18 +9,16 @@ export default defineConfig(({ mode }) => {
     throw new Error('VITE_API_BASE_URL must be set');
   }
 
-  const proxyConfig: Record<string, ProxyOptions> = {
+  const proxy: Record<string, ProxyOptions> = {
     '/auth': {
       target: env.VITE_API_BASE_URL,
       changeOrigin: true,
-      secure: false,
-      credentials: 'include'
+      secure: false
     },
     '/api': {
       target: env.VITE_API_BASE_URL,
       changeOrigin: true,
-      secure: false,
-      credentials: 'include'
+      secure: false
     }
   };
 
@@ -31,7 +29,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
-      proxy: proxyConfig
+      proxy
     },
     resolve: {
       alias: {
