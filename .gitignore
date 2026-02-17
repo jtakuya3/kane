@@ -37,3 +37,9 @@ ENV/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Trial data (may contain sensitive conversation logs)
+data/trials/
+
+# API keys
+.env.local
