@@ -1,16 +1,27 @@
 [tool.poetry]
 name = "kane"
 version = "0.1.0"
-description = ""
+description = "5 AI Investment Agents competing on X"
 authors = ["Takuya Kanesaki"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+anthropic = "^0.40.0"
+yfinance = "^0.2.40"
+feedparser = "^6.0.0"
+requests = "^2.31.0"
+tweepy = "^4.14.0"
+aiohttp = "^3.9.0"
+python-dotenv = "^1.0.0"
+schedule = "^1.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 black = "^24.1.1"
 flake8 = "^7.0.0"
+
+[tool.poetry.scripts]
+five-agents = "five_agents.main:main"
 
 [build-system]
 requires = ["poetry-core"]

@@ -37,3 +37,6 @@ ENV/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Data
+data/portfolio.db
