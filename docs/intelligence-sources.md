@@ -302,11 +302,67 @@ JEFF（キャッシュフロー重視）
 
 ---
 
+## 15. インフラ監視（電力・通信）
+
+| ソース | 内容 | API/ツール | 投資への影響 |
+|--------|------|-----------|-------------|
+| **Grid Status** | 米国電力グリッドデータ | gridstatus.io (無料) | 電力需要=経済活動のリアルタイム代理指標 |
+| **U.S. EIA Grid Monitor** | 米国発電量・需要・電力融通 | eia.gov/electricity/gridmonitor (無料, APIキー不要) | 産業活動のリアルタイムGDP代理 |
+| **Electricity Maps** | 世界の電力ミックス・CO2強度・価格 | app.electricitymaps.com (無料Web) | 各国産業活動の国際比較 |
+| **IODA (Internet Outage Detection)** | BGP+ダークネットによるインターネット断検知 | ooni.org/partners/ioda (無料) | 通信障害=政情不安・災害の即時検知 |
+| **ThousandEyes** | ISP/クラウドプロバイダー障害検知 | thousandeyes.com/outages (無料マップ) | テック企業SLA影響→業績インパクト |
+
+---
+
+## 16. フットトラフィック・位置情報
+
+| ソース | 内容 | API/ツール | 投資への影響 |
+|--------|------|-----------|-------------|
+| **Placer.ai** | 小売/飲食/不動産のフットトラフィック | placer.ai/free-tools (基本機能無料) | 既存店売上の先行指標 |
+| **Google Popular Times** | 店舗の混雑レベル推定 | Google Maps (非公式、スクレイピング) | 個店レベルの来客数 |
+
+---
+
+## 17. 中央銀行NLP分析
+
+| ソース | 内容 | API/ツール | 投資への影響 |
+|--------|------|-----------|-------------|
+| **FinBERT** | 金融テキスト特化の感情分析モデル | huggingface.co/ProsusAI/finbert (無料OSS) | FOMC議事録のタカ派/ハト派自動分類 |
+| **Fed NLP Tutorial** | FOMC議事録の感情分析チュートリアル | dev.to (無料、コード付き) | DIYで中央銀行NLPパイプライン構築 |
+
+---
+
+## 18. 統合プラットフォーム
+
+| ソース | 内容 | API/ツール | 投資への影響 |
+|--------|------|-----------|-------------|
+| **OpenBB Terminal** | OSS版Bloomberg Terminal | openbb.co (無料OSS) | 数十のデータソースをPythonで統合 |
+| **Finnhub** | 株価+決算文字起こし+ESG+FDA+IPOカレンダー | finnhub.io (無料枠が充実) | 1つのAPIで幅広いデータ取得 |
+| **Polygon.io** | 機関投資家級リアルタイム市場データ | polygon.io (無料枠=遅延データ) | 株式/オプション/暗号/FX統合 |
+| **Quandl / Nasdaq Data Link** | 数百の金融+オルタナティブデータセット | data.nasdaq.com (無料枠あり) | 定量リサーチの定番 |
+
+---
+
+## 19. その他ヘッジファンドが使う非従来型データ
+
+| ソース | 内容 | API/ツール | 投資への影響 |
+|--------|------|-----------|-------------|
+| **コーポレートジェット追跡** | 企業プライベートジェットの飛行履歴 | Quiver Quant ($10/mo) / ADS-B Exchange (無料API) | CEO出張パターン=M&A・危機対応の先行指標 |
+| **Wikipedia閲覧数** | 企業Wikipediaページの閲覧数推移 | Wikimedia REST API (無料) | 注目度スパイク=株価ボラティリティの先行指標 |
+| **ApeWisdom** | WSB/r/stocks/r/crypto/4chanの銘柄言及 | apewisdom.io/api (無料) | ミーム株モメンタム早期検知 |
+| **TraderCongress** | 議員取引+インサイダー+ロビイング+政府契約統合 | tradercongress.com (基本無料) | 政治関連投資シグナル統合ダッシュボード |
+| **OSINT Worldview** | フルスタックOSINT+金融ダッシュボード | github.com/amanimran786/osint-worldview (OSS) | 92取引所・19金融センター・13中央銀行をリアルタイム監視 |
+| **Numerai** | ML予測トーナメント型ヘッジファンド | numer.ai (無料参加、暗号通貨で報酬) | 予測が当たれば報酬を得られる |
+
+---
+
 ## 参考：関連OSSリポジトリ
 
 | リポジトリ | 内容 |
 |-----------|------|
+| github.com/wilsonfreitas/awesome-quant | ★18K+ クオンツ金融ライブラリ・データ総合リスト |
 | github.com/BigBodyCobain/Shadowbroker | 地政学OSINTダッシュボード |
+| github.com/amanimran786/osint-worldview | フルスタックOSINT+金融ダッシュボード |
 | github.com/SC4RECOIN/FlowAlgo-Options-Trader | オプションフロー自動売買Bot |
 | github.com/pmaji/crypto-whale-watching-app | 暗号クジラ監視ダッシュボード |
 | github.com/Analitico-771/Crypto-Whale-Tracker | マルチアセットウォレット追跡 |
@@ -317,7 +373,10 @@ JEFF（キャッシュフロー重視）
 | github.com/followthemoney/vessel_research | 船舶調査ツール（Global Fishing Watch連携） |
 | github.com/fitomad/App-Store-Ranking | App Store全国ランキング取得 |
 | github.com/Quiver-Quantitative/python-api | Quiver Quant Python SDK（議員取引等） |
+| github.com/QuantConnect/Lean | ★10K+ OSS アルゴリズム取引エンジン |
 | github.com/QuantConnect/Lean.DataSource.QuiverQuantCongressTrading | 議員取引バックテスト統合 |
+| github.com/Adith-Rai/Reddit-Stock-Sentiment-Analyzer | AWS規模Reddit感情分析パイプライン |
+| github.com/asad70/wallstreetbets-sentiment-analysis | WSB特化感情分析（300+スラング対応） |
 | github.com/topics/satellite-imagery-analysis | 衛星画像分析OSSコレクション |
 | github.com/topics/options-trading | オプション取引関連OSS（362+リポジトリ） |
 | github.com/topics/wallet-tracker | ウォレット追跡関連OSS |
