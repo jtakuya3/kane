@@ -20,6 +20,13 @@ from .posting.formatter import (
     format_exit_post,
     format_weekly_report,
 )
+from .posting.notifier import (
+    notify_correlation_alert,
+    notify_daily_summary,
+    notify_exit,
+    notify_trade,
+    notify_weekly_report,
+)
 from .posting.x_client import XClient
 
 logging.basicConfig(
@@ -60,6 +67,7 @@ async def run_daily_cycle(dry_run: bool = True):
     brief_summary = _summarize_for_brief(data_points)
     brief_post = format_daily_brief(brief_summary)
     x_client.post(brief_post)
+    notify_daily_summary(brief_summary)
 
     # 5. Check stop loss / take profit for all agents
     for persona in ALL_PERSONAS:
@@ -85,6 +93,7 @@ async def run_daily_cycle(dry_run: bool = True):
                 snapshot,
             )
             x_client.post(exit_post)
+            notify_exit(persona.name, trigger["ticker"], trigger["trigger"], trigger["pnl_pct"])
 
     # 6. Each agent makes a decision (sequentially so they can see others' decisions)
     decisions: list[Decision] = []
@@ -112,6 +121,9 @@ async def run_daily_cycle(dry_run: bool = True):
         # Execute the decision
         if decision.action == "buy" and decision.ticker and decision.position_size_pct:
             _execute_buy(db, persona, decision, snapshot, current_prices)
+            notify_trade(persona.name, "buy", decision.ticker, int(decision.confidence), decision.reasoning_analysis)
+        elif decision.action == "sell" and decision.ticker:
+            notify_trade(persona.name, "sell", decision.ticker, int(decision.confidence), decision.reasoning_analysis)
         elif decision.action == "pass":
             if decision.ticker:
                 db.record_pass(persona.agent_id, decision.ticker, decision.confidence, decision.reasoning_analysis)
@@ -129,6 +141,7 @@ async def run_daily_cycle(dry_run: bool = True):
         snapshots = [db.get_snapshot(p.agent_id, current_prices) for p in ALL_PERSONAS]
         report = format_weekly_report(snapshots)
         x_client.post(report)
+        notify_weekly_report(report)
 
     # 8. Correlation check — warn if all agents agree
     buy_agents = [d for d in decisions if d.action == "buy"]
@@ -144,6 +157,10 @@ async def run_daily_cycle(dry_run: bool = True):
                 f"4人以上のエージェントが同じ銘柄 ${buy_agents[0].ticker} を買い判断。\n"
                 "全員一致 = 何か見落としている可能性。慎重に。\n\n"
                 "#AIInvestor #5AgentsGame"
+            )
+            notify_correlation_alert(
+                buy_agents[0].ticker,
+                [d.agent_id.upper() for d in buy_agents],
             )
 
     logger.info("\n" + "=" * 60)
