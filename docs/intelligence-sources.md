@@ -35,7 +35,9 @@
 | ソース | 内容 | API/ツール | 投資への影響 |
 |--------|------|-----------|-------------|
 | **MarineTraffic** | 船舶AIS追跡 | marinetraffic.com API | 貿易量、港湾渋滞、原油タンカー動態 |
-| **AISstream.io** | リアルタイムAIS WebSocket | aisstream.io (無料) | 船舶リアルタイム追跡 |
+| **AISstream.io** | リアルタイムAIS WebSocket | aisstream.io (無料, OpenAPI 3.0対応) | 船舶リアルタイム追跡 |
+| **AISViz** | AISデータ抽出/処理/可視化 | github.com/AISViz (OSS) | NOAA連携、カスタム分析 |
+| **Global Fishing Watch** | 港湾訪問、漁業、滞留、AISギャップ検知 | globalfishingwatch.org API (無料キー) | 海洋経済活動、制裁回避検知 |
 | **Freightos Baltic Index** | コンテナ運賃指数 | fbx.freightos.com | 物流コスト→小売/製造業マージン |
 | **Port of LA/Long Beach** | 米国最大港のコンテナ処理量 | portoflosangeles.org | 米国輸入量の先行指標 |
 | **Flexport Ocean Timeliness** | 海上輸送遅延指標 | flexport.com | サプライチェーンボトルネック |
@@ -74,7 +76,9 @@
 | ソース | 内容 | API/ツール | 投資への影響 |
 |--------|------|-----------|-------------|
 | **SEC EDGAR** | 全上場企業のファイリング | sec.gov EDGAR API (無料) | 10-K, 10-Q, 8-K, 13F |
+| **EdgarTools** | SEC Filing構造化パーサー | `pip install edgartools` (MIT, APIキー不要) | Form 3/4/5を構造化Pythonオブジェクトで取得 |
 | **SEC Form 4** | インサイダー取引報告 | sec.gov / openinsider.com | 経営者の売買=最強のシグナル |
+| **Earnings Feed API** | SEC Filing高速配信（60秒以内） | earningsfeed.com/api (無料枠: 15req/min) | リアルタイムFiling検知 |
 | **13F Filing** | 機関投資家のポジション（四半期） | whalewisdom.com / sec.gov | バフェット等の売買追跡 |
 | **Schedule 13D/G** | 5%以上の大量保有報告 | sec.gov | アクティビスト参入の検知 |
 | **EDINET** | 日本の有価証券報告書 | edinet-fsa.go.jp API | 日本株ファンダメンタルズ |
@@ -86,8 +90,9 @@
 
 | ソース | 内容 | API/ツール | 投資への影響 |
 |--------|------|-----------|-------------|
-| **Capitol Trades** | 米国議員の株式取引 | capitoltrades.com | 議員は法律を作る側=究極のインサイダー |
-| **Quiver Quantitative** | 議員取引、ロビイング、政府契約を統合 | quiverquant.com API (無料) | 政策→銘柄の紐付け |
+| **Capitol Trades** | 米国議員の株式取引 | capitoltrades.com (無料ダッシュボード) | 議員は法律を作る側=究極のインサイダー |
+| **Quiver Quantitative** | 議員取引、ロビイング、政府契約を統合 | quiverquant.com (無料ダッシュボード, API $10/mo, Python SDK on GitHub) | 政策→銘柄の紐付け |
+| **GovGreed** | 188K+議会取引、法案MLスコアリング | govgreed.com/api (2026夏ローンチ、30日無料) | 法案→銘柄インパクトのML予測 |
 | **OpenSecrets** | 政治献金、ロビイングデータ | opensecrets.org API | 規制変更の先行指標 |
 | **Congress.gov** | 法案の進捗追跡 | congress.gov API | 法案成立→業界インパクト |
 | **Federal Register** | 米国連邦規制の公告 | federalregister.gov API | 新規制の影響分析 |
@@ -98,10 +103,13 @@
 
 | ソース | 内容 | API/ツール | 投資への影響 |
 |--------|------|-----------|-------------|
-| **USPTO PatentsView** | 米国特許データ | patentsview.org API (無料) | 技術的優位性の定量化 |
+| **USPTO PatentsView** | 米国特許データ | patentsview.org API (無料) → 2026/3 ODP移行中 | 技術的優位性の定量化 |
+| **USPTO Open Data Portal** | 特許ファイルラッパー、譲渡、商標 | developer.uspto.gov (複数の無料API) | 特許出願・譲渡のリアルタイム追跡 |
+| **EPO Open Patent Services** | 欧州特許データ、法的状態、特許ファミリー | ops.epo.org (無料XML API) | 欧州企業の技術力 |
 | **Google Patents** | 世界の特許検索 | patents.google.com | 競合分析 |
 | **J-PlatPat** | 日本の特許検索 | j-platpat.inpit.go.jp | 日本企業の技術力 |
 | **Lens.org** | 特許+学術論文の統合検索 | lens.org API | 研究→特許→製品のパイプライン |
+| **WIPO PATENTSCOPE** | PCT国際出願、1億件超の特許文書 | patentscope.wipo.int (無料検索) | グローバル特許トレンド |
 
 ---
 
@@ -112,6 +120,8 @@
 | **Google Trends** | 検索ボリュームの変化 | trends.google.com (非公式API) | 消費者関心の先行指標 |
 | **Indeed/Glassdoor求人数** | 業種別求人動向 | indeed.com / glassdoor.com | 雇用の先行指標、企業の成長期待 |
 | **App Annie / Sensor Tower** | アプリDL数ランキング | data.ai | SaaS/テック企業の成長追跡 |
+| **NextLabs / AppVector** | App Storeランキング追跡 | nextlabs.io (無料200キーワード/日) | アプリ成長のリアルタイム監視 |
+| **42matters** | アプリメタデータ、DL推定、トップチャート | 42matters.com (14日無料トライアル) | Google Play/Apple/Amazon横断分析 |
 | **SimilarWeb** | ウェブトラフィック推定 | similarweb.com (一部無料) | EC/SaaS企業の利用動向 |
 | **Glassdoor企業レビュー** | 従業員の満足度変化 | glassdoor.com | 内部崩壊の早期検知 |
 | **GitHub Star/Commit推移** | OSSプロジェクトの活性度 | github.com API | テック企業の開発者エコシステム |
@@ -127,12 +137,15 @@
 
 | ソース | 内容 | API/ツール | 投資への影響 |
 |--------|------|-----------|-------------|
-| **Unusual Whales** | 異常オプションフロー検知 | unusualwhales.com | スマートマネーの動き |
+| **Unusual Whales** | 異常オプションフロー検知 | unusualwhales.com/public-api (100+エンドポイント) | スマートマネーの動き |
+| **Intrinio Options** | 異常オプションアクティビティ | docs.intrinio.com (無料枠あり) | 全オプションチェーンの異常検知 |
 | **CBOE Options Data** | Put/Call Ratio、VIX先物 | cboe.com | 市場センチメント |
 | **FINRA Short Interest** | 空売り残高（隔週更新） | finra.org | ショートスクイーズ候補 |
-| **Dark Pool Data (FINRA ATS)** | ダークプール取引量 | finra.org/finra-data | 機関投資家の動向 |
+| **FINRA OTC Transparency** | ダークプール取引量（週次） | otctransparency.finra.org (無料) / developer.finra.org | 機関投資家の動向（2-4週遅延） |
+| **Stockgrid** | ダークプール可視化 | stockgrid.io/darkpools (無料ダッシュボード) | ダークプールネットポジション |
 | **Whale Alert** | 暗号通貨の大口送金 | whale-alert.io API (無料枠) | クジラの売買=暗号市場の先行指標 |
-| **Arkham Intelligence** | 暗号ウォレットのラベリング/追跡 | arkham.com | 取引所/ファンドの暗号通貨フロー |
+| **ClankApp** | 20+チェーンの大口取引インデックス | clankapp.com API (無料) | マルチチェーン暗号クジラ追跡 |
+| **Arkham Intelligence** | 8億+ウォレットラベル、マルチチェーン | arkham.com (無料枠) | 取引所/ファンドの暗号通貨フロー |
 | **Glassnode** | オンチェーン分析（一部無料） | glassnode.com | 暗号通貨のファンダメンタルズ |
 | **Fear & Greed Index** | CNN市場恐怖/貪欲指数 | money.cnn.com | 極端な恐怖=逆張り買いシグナル |
 
@@ -187,6 +200,25 @@
 | **Finnhub** | 株価+オルタナティブデータ統合 | finnhub.io (無料枠) | 統合データプラットフォーム |
 | **SimFin** | クリーンな財務データ | simfin.com API (無料) | ファンダメンタルズ分析 |
 | **Macrotrends** | 長期財務データ | macrotrends.net | 10年以上の財務トレンド |
+
+---
+
+## カテゴリ別ベスト無料ツール（実装優先順）
+
+| カテゴリ | ベスト無料ツール | 備考 |
+|---------|-----------------|------|
+| SEC インサイダー取引 | **EdgarTools** (`pip install edgartools`, MIT, APIキー不要) | Form 3/4/5を構造化取得 |
+| ダークプール | **FINRA OTC Transparency** (otctransparency.finra.org) | 2-4週遅延だが無料 |
+| 議員取引 | **Capitol Trades** (capitoltrades.com) | 無料ダッシュボード |
+| 特許監視 | **USPTO Open Data Portal** (developer.uspto.gov) | 複数の無料API |
+| 求人/雇用 | **FRED API** + **BLS API** (共に無料) | JOLTS含む |
+| App Storeランキング | **NextLabs** (nextlabs.io, 200キーワード/日無料) | Google Sheetsアドオン |
+| 船舶/港湾 | **aisstream.io** (無料WebSocket API) | リアルタイムAIS |
+| 衛星画像 | **Sentinel Hub** (sentinelhub.com, 無料枠) | 10m解像度 |
+| オプションフロー | **Intrinio** (docs.intrinio.com, 無料枠) | 異常アクティビティAPI |
+| 暗号クジラ | **ClankApp** (clankapp.com, 無料API) | 20+チェーン対応 |
+| マクロ経済 | **FRED** (fred.stlouisfed.org, 840K+系列) | 最重要インフラ |
+| 地政学OSINT | **Shadowbroker** (自己ホスト) | Docker一発デプロイ |
 
 ---
 
@@ -267,3 +299,25 @@ JEFF（キャッシュフロー重視）
 - 自然災害
 - 規制発表
 - 大型M&A/IPO
+
+---
+
+## 参考：関連OSSリポジトリ
+
+| リポジトリ | 内容 |
+|-----------|------|
+| github.com/BigBodyCobain/Shadowbroker | 地政学OSINTダッシュボード |
+| github.com/SC4RECOIN/FlowAlgo-Options-Trader | オプションフロー自動売買Bot |
+| github.com/pmaji/crypto-whale-watching-app | 暗号クジラ監視ダッシュボード |
+| github.com/Analitico-771/Crypto-Whale-Tracker | マルチアセットウォレット追跡 |
+| github.com/factoredai/insiderTradingAPI_v1 | S&P500インサイダー取引データ+ML予測 |
+| github.com/aluay/Insight | ダークプール+空売り+ニュース統合API |
+| github.com/AISViz | AISデータ処理/可視化ツールボックス |
+| github.com/SuperMayo/AIS_tracker | GitHub Actions定期船舶追跡 |
+| github.com/followthemoney/vessel_research | 船舶調査ツール（Global Fishing Watch連携） |
+| github.com/fitomad/App-Store-Ranking | App Store全国ランキング取得 |
+| github.com/Quiver-Quantitative/python-api | Quiver Quant Python SDK（議員取引等） |
+| github.com/QuantConnect/Lean.DataSource.QuiverQuantCongressTrading | 議員取引バックテスト統合 |
+| github.com/topics/satellite-imagery-analysis | 衛星画像分析OSSコレクション |
+| github.com/topics/options-trading | オプション取引関連OSS（362+リポジトリ） |
+| github.com/topics/wallet-tracker | ウォレット追跡関連OSS |
