@@ -6,6 +6,9 @@ authors = ["Takuya Kanesaki"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+yt-dlp = ">=2024.0.0"
+openai-whisper = ">=20231117"
+imageio-ffmpeg = ">=0.5.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
