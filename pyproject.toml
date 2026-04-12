@@ -8,6 +8,7 @@ authors = ["Takuya Kanesaki"]
 python = "^3.12"
 yt-dlp = ">=2024.0.0"
 openai-whisper = ">=20231117"
+openai = ">=1.0.0"
 imageio-ffmpeg = ">=0.5.1"
 
 [tool.poetry.group.dev.dependencies]
