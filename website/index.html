@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SMART Consulting - 経営戦略・M&A・事業再生・補助金支援。中小企業の“今”を動かす、即戦力のパートナー。" />
+  <meta name="theme-color" content="#0b1f44" />
+  <title>SMART Consulting | 株式会社スマートコンサルティング</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+JP:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+</head>
+<body>
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
+  <header class="site-header" id="siteHeader">
+    <div class="container header-inner">
+      <a href="#top" class="logo-link" aria-label="SMART Consulting ホーム">
+        <img src="assets/logo.svg" alt="" class="logo-image" />
+        <span class="logo-text">SMART<span class="logo-dot">.</span>Consulting</span>
+      </a>
+      <nav class="global-nav" id="globalNav" aria-label="グローバルナビゲーション">
+        <ul>
+          <li><a href="#about">About</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#flow">Flow</a></li>
+          <li><a href="#members">Members</a></li>
+          <li><a href="#works">Clients</a></li>
+          <li><a href="#company">Company</a></li>
+          <li><a href="#contact" class="nav-cta">Contact</a></li>
+        </ul>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-controls="globalNav" aria-label="メニューを開く" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ===== Hero Carousel ===== -->
+    <section class="hero">
+      <div class="carousel" id="heroCarousel" aria-roledescription="carousel" aria-label="メインビジュアル">
+        <div class="carousel-track" id="carouselTrack">
+          <div class="carousel-slide slide-1" role="group" aria-roledescription="slide" aria-label="1/4">
+            <div class="slide-bg"></div>
+            <div class="slide-content">
+              <p class="slide-eyebrow">MANAGEMENT STRATEGY</p>
+              <h1 class="slide-title"><span>経営の、</span><span>“芯”を掴む。</span></h1>
+              <p class="slide-desc">現状分析から戦略構築まで。本質的な課題解決を、スピード感をもって伴走します。</p>
+              <a href="#services" class="btn btn-primary">サービスを見る</a>
+            </div>
+          </div>
+          <div class="carousel-slide slide-2" role="group" aria-roledescription="slide" aria-label="2/4">
+            <div class="slide-bg"></div>
+            <div class="slide-content">
+              <p class="slide-eyebrow">M&amp;A ADVISORY</p>
+              <h1 class="slide-title"><span>次の一手を、</span><span>最適な形で。</span></h1>
+              <p class="slide-desc">中小企業のM&amp;Aを、経営者目線で。仲介ガイドライン遵守のもと、誠実にご支援します。</p>
+              <a href="#services" class="btn btn-primary">M&amp;A支援について</a>
+            </div>
+          </div>
+          <div class="carousel-slide slide-3" role="group" aria-roledescription="slide" aria-label="3/4">
+            <div class="slide-bg"></div>
+            <div class="slide-content">
+              <p class="slide-eyebrow">TURNAROUND</p>
+              <h1 class="slide-title"><span>事業再生を、</span><span>現場から。</span></h1>
+              <p class="slide-desc">金融機関調整から業務改善まで。経営者とともに、再起動をつくります。</p>
+              <a href="#flow" class="btn btn-primary">相談の流れ</a>
+            </div>
+          </div>
+          <div class="carousel-slide slide-4" role="group" aria-roledescription="slide" aria-label="4/4">
+            <div class="slide-bg"></div>
+            <div class="slide-content">
+              <p class="slide-eyebrow">SUBSIDY &amp; FUNDING</p>
+              <h1 class="slide-title"><span>補助金・資金調達を、</span><span>最短で。</span></h1>
+              <p class="slide-desc">補助金サーチ＆ガイドを独自提供。機会を逃さず、確度高く実行まで。</p>
+              <a href="#contact" class="btn btn-primary">無料相談する</a>
+            </div>
+          </div>
+        </div>
+
+        <button class="carousel-btn carousel-prev" id="carouselPrev" aria-label="前のスライド">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <button class="carousel-btn carousel-next" id="carouselNext" aria-label="次のスライド">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+        <div class="carousel-indicators" id="carouselIndicators" role="tablist" aria-label="スライド選択"></div>
+      </div>
+      <div class="scroll-hint" aria-hidden="true">
+        <span>SCROLL</span>
+        <span class="scroll-line"></span>
+      </div>
+    </section>
+
+    <!-- ===== About ===== -->
+    <section id="about" class="section section-about reveal">
+      <div class="container about-layout">
+        <div class="about-heading">
+          <p class="section-eyebrow">ABOUT US</p>
+          <h2 class="section-title jp-serif">
+            経営の“すぐそば”で、<br />
+            <span class="accent">動かす。</span>
+          </h2>
+        </div>
+        <div class="about-body">
+          <p>
+            SMART Consulting（スマートコンサルティング）は、経営コンサルタント・MBA・中小企業診断士による
+            経営専門家集団です。<strong>経営戦略・M&amp;A・事業再生・補助金支援</strong>を中核に、
+            中小企業の「今」を前に進める即戦力パートナーとして伴走します。
+          </p>
+          <p>
+            机上の助言ではなく、現場で手を動かす。数字にとことん向き合い、意思決定に寄り添う。
+            私たちが目指すのは、“使い倒せる”コンサルティングです。
+          </p>
+          <dl class="about-stats">
+            <div><dt data-count="320">0</dt><dd>SUPPORT CASES</dd></div>
+            <div><dt data-count="98" data-suffix="%">0</dt><dd>CLIENT SATISFACTION</dd></div>
+            <div><dt data-count="15" data-suffix="+">0</dt><dd>YEARS EXPERIENCE</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Services ===== -->
+    <section id="services" class="section section-services reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">SERVICES</p>
+          <h2 class="section-title jp-serif">サービス</h2>
+          <p class="section-lead">経営の“ど真ん中”に切り込む、4つの中核サービス。</p>
+        </div>
+        <div class="services-grid">
+          <article class="service-card">
+            <div class="service-num">01</div>
+            <h3>経営戦略</h3>
+            <p>中期経営計画・事業計画の策定から実行支援まで。現状診断・市場分析・KPI設計を一気通貫で。</p>
+            <ul class="service-tags"><li>中期経営計画</li><li>事業計画</li><li>KPI設計</li></ul>
+          </article>
+          <article class="service-card">
+            <div class="service-num">02</div>
+            <h3>M&amp;Aアドバイザリー</h3>
+            <p>売却・買収双方に対応。中小M&amp;Aガイドラインに準拠し、経営者目線の誠実なサポートを徹底。</p>
+            <ul class="service-tags"><li>売却支援</li><li>買収支援</li><li>企業価値評価</li></ul>
+          </article>
+          <article class="service-card">
+            <div class="service-num">03</div>
+            <h3>事業再生</h3>
+            <p>金融機関調整・リスケ・経営改善計画。収益構造の立て直しを、現場・数値の両面から支援します。</p>
+            <ul class="service-tags"><li>経営改善計画</li><li>金融機関対応</li><li>収益構造改革</li></ul>
+          </article>
+          <article class="service-card">
+            <div class="service-num">04</div>
+            <h3>補助金・資金調達</h3>
+            <p>独自の「補助金サーチ」と実行支援。ものづくり・事業再構築・IT導入など、実行可能性の高い提案を。</p>
+            <ul class="service-tags"><li>補助金申請</li><li>金融機関借入</li><li>事業計画作成</li></ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Flow ===== -->
+    <section id="flow" class="section section-flow reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">FLOW</p>
+          <h2 class="section-title jp-serif">ご相談の流れ</h2>
+          <p class="section-lead">初回相談から伴走まで、スピーディかつ誠実に。</p>
+        </div>
+        <ol class="flow-list">
+          <li>
+            <div class="flow-step">STEP 01</div>
+            <h3>お問い合わせ</h3>
+            <p>フォーム・お電話から、まずはお気軽にご相談ください。初回ヒアリングは無料です。</p>
+          </li>
+          <li>
+            <div class="flow-step">STEP 02</div>
+            <h3>現状ヒアリング</h3>
+            <p>事業・財務・組織の現状を伺い、論点を整理。課題仮説と方向性をすり合わせます。</p>
+          </li>
+          <li>
+            <div class="flow-step">STEP 03</div>
+            <h3>ご提案・契約</h3>
+            <p>スコープ・期間・費用を明確化した提案書をご提示。納得のうえご契約いただきます。</p>
+          </li>
+          <li>
+            <div class="flow-step">STEP 04</div>
+            <h3>支援開始・伴走</h3>
+            <p>現場に入り、数字と意思決定に寄り添って実行を支援。定例でPDCAを回します。</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===== Members ===== -->
+    <section id="members" class="section section-members reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">MEMBERS</p>
+          <h2 class="section-title jp-serif">メンバー</h2>
+          <p class="section-lead">経営の最前線を歩んできたプロフェッショナル。</p>
+        </div>
+        <div class="members-grid">
+          <article class="member-card">
+            <div class="member-avatar" aria-hidden="true">K</div>
+            <h3>金崎 拓也</h3>
+            <p class="member-role">代表取締役 / 中小企業診断士・MBA</p>
+            <p>大手商社での事業投資・経営企画を経てSMART Consultingを創業。経営戦略とM&amp;A領域を中心にリード。</p>
+          </article>
+          <article class="member-card">
+            <div class="member-avatar" aria-hidden="true">S</div>
+            <h3>佐藤 美和</h3>
+            <p class="member-role">シニアコンサルタント / 公認会計士</p>
+            <p>監査法人出身。財務デューデリジェンスや事業再生領域のプロジェクトを多数リード。</p>
+          </article>
+          <article class="member-card">
+            <div class="member-avatar" aria-hidden="true">T</div>
+            <h3>髙橋 遼</h3>
+            <p class="member-role">コンサルタント / 中小企業診断士</p>
+            <p>事業会社の経営企画を経て入社。補助金支援と事業計画策定を中心に現場主導で支援。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Logo Marquee / Clients ===== -->
+    <section id="works" class="section section-works reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">CLIENTS</p>
+          <h2 class="section-title jp-serif">ご支援実績</h2>
+          <p class="section-lead">製造・小売・飲食・IT・医療など、多様な業界でご活用いただいています。</p>
+        </div>
+      </div>
+      <div class="logo-marquee" aria-label="クライアントロゴ">
+        <div class="logo-marquee-track">
+          <span>ALPHA</span><span>BRIDGE</span><span>CORE・X</span><span>DELTA</span>
+          <span>ECHO Inc.</span><span>FORGE</span><span>GLOW</span><span>HELIX</span>
+          <span>INDIGO</span><span>JADE</span><span>KITE</span><span>LUMEN</span>
+          <!-- 複製：シームレスループ用 -->
+          <span>ALPHA</span><span>BRIDGE</span><span>CORE・X</span><span>DELTA</span>
+          <span>ECHO Inc.</span><span>FORGE</span><span>GLOW</span><span>HELIX</span>
+          <span>INDIGO</span><span>JADE</span><span>KITE</span><span>LUMEN</span>
+        </div>
+      </div>
+      <div class="container">
+        <ul class="logo-wall" aria-hidden="true">
+          <li class="logo-wall-item"><span>ALPHA</span></li>
+          <li class="logo-wall-item"><span>BRIDGE</span></li>
+          <li class="logo-wall-item"><span>CORE・X</span></li>
+          <li class="logo-wall-item"><span>DELTA</span></li>
+          <li class="logo-wall-item"><span>ECHO Inc.</span></li>
+          <li class="logo-wall-item"><span>FORGE</span></li>
+          <li class="logo-wall-item"><span>GLOW</span></li>
+          <li class="logo-wall-item"><span>HELIX</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===== News ===== -->
+    <section id="news" class="section section-news reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">NEWS</p>
+          <h2 class="section-title jp-serif">ニュース</h2>
+        </div>
+        <ul class="news-list">
+          <li>
+            <time datetime="2026-04-10">2026.04.10</time>
+            <span class="news-tag">RELEASE</span>
+            <p>「補助金・資金調達ガイド」と「補助金サーチ」をアップデートしました。</p>
+          </li>
+          <li>
+            <time datetime="2026-03-21">2026.03.21</time>
+            <span class="news-tag">NOTICE</span>
+            <p>中小M&amp;Aガイドライン遵守に関するお知らせを公開しました。</p>
+          </li>
+          <li>
+            <time datetime="2026-02-05">2026.02.05</time>
+            <span class="news-tag">MEDIA</span>
+            <p>業界誌「経営ジャーナル」に代表・金崎のインタビューが掲載されました。</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===== Company ===== -->
+    <section id="company" class="section section-company reveal">
+      <div class="container">
+        <div class="section-heading">
+          <p class="section-eyebrow">COMPANY</p>
+          <h2 class="section-title jp-serif">会社概要</h2>
+        </div>
+        <dl class="company-info">
+          <div><dt>商号</dt><dd>株式会社スマートコンサルティング / SMART Consulting Inc.</dd></div>
+          <div><dt>代表者</dt><dd>代表取締役 金崎 拓也（中小企業診断士・MBA）</dd></div>
+          <div><dt>所在地</dt><dd>東京都中央区日本橋小伝馬町13-7 日本橋大富ビル2F</dd></div>
+          <div><dt>事業内容</dt><dd>経営戦略／M&amp;Aアドバイザリー／事業再生／補助金・資金調達支援</dd></div>
+          <div><dt>お問い合わせ</dt><dd><a href="#contact">お問い合わせフォームへ</a></dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ===== Contact ===== -->
+    <section id="contact" class="section section-contact reveal">
+      <div class="container contact-inner">
+        <p class="section-eyebrow">CONTACT</p>
+        <h2 class="section-title jp-serif">まずは、ご相談を。</h2>
+        <p class="section-lead">初回相談は無料。経営のモヤモヤ、言語化から一緒に。</p>
+        <div class="contact-actions">
+          <a href="mailto:info@example.com" class="btn btn-primary btn-large">お問い合わせする</a>
+          <a href="#services" class="btn btn-ghost btn-large">サービスを見る</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/logo.svg" alt="" class="logo-image" />
+        <span>SMART<span class="logo-dot">.</span>Consulting</span>
+      </div>
+      <nav class="footer-nav" aria-label="フッターナビゲーション">
+        <a href="#about">About</a>
+        <a href="#services">Services</a>
+        <a href="#flow">Flow</a>
+        <a href="#company">Company</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <p class="footer-copy">&copy; 2026 SMART Consulting Inc. All Rights Reserved.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
