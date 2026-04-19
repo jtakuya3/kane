@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SMART Consulting logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#15316a"/>
+      <stop offset="100%" stop-color="#0b1f44"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#g)"/>
+  <path d="M18 22h20a6 6 0 0 1 6 6v0a6 6 0 0 1-6 6H26a6 6 0 0 0-6 6v0a6 6 0 0 0 6 6h20" fill="none" stroke="#c9a24a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="48" cy="22" r="3" fill="#c9a24a"/>
+</svg>
