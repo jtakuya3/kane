@@ -37,3 +37,9 @@ ENV/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Kane runtime data
+data/raw/
+data/work/
+data/clips/
+data/state.json
