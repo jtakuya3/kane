@@ -115,6 +115,17 @@ mcp__Google-Drive__read_file_content(fileId="14-W9lnTazl1fv7ck0Tmm5qYzehbFsnlw3E
 
 「実行ログ」シートの**末尾に1行追記**する（上書きしない）。
 
+### ステップ7: 成果物リンクを出力する
+
+タスクの最後に以下のテキストを必ず出力する:
+
+```
+✅ IPOチェック完了（YYYY/MM/DD HH:MM JST）
+・新規追加: N件
+・更新: N件
+・成果物: https://docs.google.com/spreadsheets/d/14-W9lnTazl1fv7ck0Tmm5qYzehbFsnlw3E3e8B5URyI/
+```
+
 ---
 
 ## データ品質ルール
