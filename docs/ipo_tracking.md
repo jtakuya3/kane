@@ -22,10 +22,12 @@
 
 ## Google Sheetsの構造
 
-### スプレッドシートの特定方法
+### スプレッドシートID
 
-Google Sheets MCPの `search_files` または `list_recent_files` を使って、
-ファイル名に「IPO」を含むスプレッドシートを検索して特定すること。
+**固定ID: `14-W9lnTazl1fv7ck0Tmm5qYzehbFsnlw3E3e8B5URyI`**
+
+このスプレッドシートのみを読み書き対象とする。他のファイルは一切操作しないこと。
+`mcp__Google-Drive__read_file_content` でこのIDを直接指定して読み込む。
 
 ### シート「IPO一覧」の列構成
 
