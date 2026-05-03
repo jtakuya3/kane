@@ -7,8 +7,9 @@
 
 ### 管理シート
 
-- **Google Sheets（マスター）**: https://docs.google.com/spreadsheets/d/14-W9lnTazl1fv7ck0Tmm5qYzehbFsnlw3E3e8B5URyI/edit?gid=0#gid=0
-- すべての更新はこのスプレッドシートに対して行う。ローカルのxlsxファイルは使用しない。
+- **Notion（マスター）**: https://www.notion.so/IPO-ba01199582c243d3be0e1db8d1c50c69
+- すべての更新はこのNotionページに対して行う。ローカルのxlsxファイルは使用しない。
+- **積み上げ式更新**: 毎回すべてのIPO銘柄を調査せず、前回チェック以降の差分のみを追記する。初回実行時のみ全件を登録する。
 
 ---
 
@@ -16,7 +17,7 @@
 
 ### 定期チェック（Routine による自動起動）
 - **Claude Code on the web の Routine で毎日20:00 JST に自動起動**
-- 起動時に「新規承認」「ステータス変更」「初値確定」を確認し、Google Sheetsを更新
+- 起動時に「新規承認」「ステータス変更」「初値確定」を確認し、Notionを更新
 
 ### 手動チェック（ユーザー発話時）
 - 「IPOチェック」「IPO更新」「新規承認あった？」等の発話で起動
@@ -165,7 +166,6 @@
 - PER/PBR：倍表記（小数第1位まで）
 - 赤字企業のPER：「赤字」と記載
 - 未確定項目：「未定」と記載
-- 未上場銘柄：黄色ハイライト（Google Sheetsの条件付き書式）
 
 ---
 
@@ -200,7 +200,7 @@
 
 ■ 5月上場分の新規承認: あり/なし
 
-■ 一覧表更新: 必要/不要
+■ Notion更新: 必要/不要
 ```
 
 ---
@@ -266,16 +266,25 @@
 
 ---
 
-## 11. Google Sheets 更新手順
+## 11. Notion 更新手順
 
-更新対象シート: https://docs.google.com/spreadsheets/d/14-W9lnTazl1fv7ck0Tmm5qYzehbFsnlw3E3e8B5URyI/edit?gid=0#gid=0
+更新対象ページ: https://www.notion.so/IPO-ba01199582c243d3be0e1db8d1c50c69
 
-1. 上記Google Sheetsの「IPO一覧」シートを開く
-2. 新規銘柄は最下行に追加
-3. ステータス変更は該当セルを直接更新
-4. 初値確定した銘柄は黄色ハイライトを解除（条件付き書式 or 手動）
-5. 「同業PER比較」シートにも対応行を追加
-6. 更新内容のサマリーを差分報告フォーマット（§7）でユーザーに通知
+### 積み上げ式更新（毎回すべては調査しない）
+- **前回チェック日以降**に新規承認・ステータス変更があった銘柄のみを調査・更新する
+- 初回実行時のみ、すべての2026年以降IPO銘柄を収集して一括登録する
+- 上場済み（初値確定）の銘柄は原則再調査しない
+
+### 更新手順
+1. Notion MCPツールで上記ページを取得し、最終チェック日と既存データを確認（`notion-fetch`）
+2. 最終チェック日以降の差分（新規承認・ステータス変更・価格確定）のみを調査対象とする
+3. 新規銘柄はNotionデータベースに新規ページとして追加（`notion-create-pages`）
+4. ステータス変更・価格更新は該当ページを更新（`notion-update-page`）
+5. 更新内容のサマリーを差分報告フォーマット（§7）でユーザーに通知
+
+---
+
+## 12. Routine 設定
 
 ### 起動スケジュール（Claude Code on the web の Routine）
 
@@ -287,14 +296,14 @@
   - Repository: `jtakuya3/kane`
   - Branch: `claude/ipo-tracking-system-sLDSS`（または main にマージ済みなら `main`）
   - Trigger: Schedule → Daily → 20:00（アカウントのタイムゾーンを Asia/Tokyo にしておくこと）
-  - Connectors: Google Sheets MCP を有効化（マスターシートへの直接書き込みに必要）
+  - Connectors: Notion MCP を有効化（Notionページへの直接書き込みに必要）
   - Permissions: 必要に応じて branch push を許可
 
 ### Routine 登録手順（初回のみ）
 
 1. https://claude.ai/code/routines を開き **New routine** をクリック
 2. 上記の Routine 設定値を入力
-3. **Run now** で初回テスト実行 → 差分報告フォーマット（§7）が出力されること、および Google Sheets が更新されることを確認
+3. **Run now** で初回テスト実行 → 差分報告フォーマット（§7）が出力されること、および Notion が更新されることを確認
 4. **Create routine** で確定
 
 ---
