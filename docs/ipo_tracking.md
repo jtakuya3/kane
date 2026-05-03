@@ -3,7 +3,7 @@
 ## 概要
 
 2026年以降の日本株IPO（新規上場）の情報を継続的に収集し、投資判断に必要な一覧表を維持・更新するための詳細指示。
-ユーザーが「IPOチェック」「IPO更新」等と発話した際、または毎日20:00の定期起動時に、本指示に基づいて情報収集→差分報告→一覧表更新を実行する。
+ユーザーが「IPOチェック」「IPO更新」等と発話した際、または Claude Code on the web の Routine による毎日20:00 JST の自動起動時に、本指示に基づいて情報収集→差分報告→一覧表更新を実行する。
 
 ### 管理シート
 
@@ -14,8 +14,8 @@
 
 ## 1. 情報収集のトリガーと頻度
 
-### 定期チェック（自動起動）
-- **毎日20:00に自動起動**（スケジュール実行）
+### 定期チェック（Routine による自動起動）
+- **Claude Code on the web の Routine で毎日20:00 JST に自動起動**
 - 起動時に「新規承認」「ステータス変更」「初値確定」を確認し、Google Sheetsを更新
 
 ### 手動チェック（ユーザー発話時）
@@ -277,10 +277,25 @@
 5. 「同業PER比較」シートにも対応行を追加
 6. 更新内容のサマリーを差分報告フォーマット（§7）でユーザーに通知
 
-### 起動スケジュール
-- **毎日20:00 JST に自動起動**
-- スケジュール実行は Claude Code on the web の Scheduled Sessions、または外部 cron / GitHub Actions で設定する
-- 起動時のプロンプト例: 「IPOチェック」
+### 起動スケジュール（Claude Code on the web の Routine）
+
+- **頻度**: 毎日20:00 JST
+- **設定場所**: https://claude.ai/code/routines
+- **Routine 設定値**:
+  - Name: `Daily IPO Check`
+  - Prompt: `IPOチェック（docs/ipo_tracking.md の指示書に従う）`
+  - Repository: `jtakuya3/kane`
+  - Branch: `claude/ipo-tracking-system-sLDSS`（または main にマージ済みなら `main`）
+  - Trigger: Schedule → Daily → 20:00（アカウントのタイムゾーンを Asia/Tokyo にしておくこと）
+  - Connectors: Google Sheets MCP を有効化（マスターシートへの直接書き込みに必要）
+  - Permissions: 必要に応じて branch push を許可
+
+### Routine 登録手順（初回のみ）
+
+1. https://claude.ai/code/routines を開き **New routine** をクリック
+2. 上記の Routine 設定値を入力
+3. **Run now** で初回テスト実行 → 差分報告フォーマット（§7）が出力されること、および Google Sheets が更新されることを確認
+4. **Create routine** で確定
 
 ---
 
