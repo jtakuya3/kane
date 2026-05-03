@@ -6,14 +6,14 @@
       "Bash(git log *)",
       "Bash(date *)",
       "WebFetch",
-      "mcp__Google-Drive__read_file_content",
-      "mcp__Google-Drive__search_files",
-      "mcp__Google-Drive__list_recent_files",
-      "mcp__Google-Drive__get_file_metadata",
-      "mcp__Google-Drive__create_file",
-      "mcp__Google-Drive__copy_file",
-      "mcp__Google-Drive__download_file_content",
-      "mcp__Google-Drive__get_file_permissions"
+      "mcp__notion__search",
+      "mcp__notion__get_page",
+      "mcp__notion__create_page",
+      "mcp__notion__update_page",
+      "mcp__notion__append_block_children",
+      "mcp__notion__get_database",
+      "mcp__notion__query_database",
+      "mcp__notion__create_database_item"
     ]
   }
 }
