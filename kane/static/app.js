@@ -38,6 +38,7 @@ const settingsBtn = $("settings-btn");
 const settingsDialog = $("settings");
 const voiceSelect = $("voice-select");
 const captionsToggle = $("captions-toggle");
+const textOnlyToggle = $("text-only-toggle");
 const remoteAudio = $("remote-audio");
 const modelNameEl = $("model-name");
 const loginDialog = $("login");
@@ -105,10 +106,15 @@ ensureAuth();
 const prefs = JSON.parse(localStorage.getItem("kane.prefs") || "{}");
 if (prefs.voice) voiceSelect.value = prefs.voice;
 if (typeof prefs.captions === "boolean") captionsToggle.checked = prefs.captions;
+if (typeof prefs.textOnly === "boolean") textOnlyToggle.checked = prefs.textOnly;
 const savePrefs = () => {
   localStorage.setItem(
     "kane.prefs",
-    JSON.stringify({ voice: voiceSelect.value, captions: captionsToggle.checked }),
+    JSON.stringify({
+      voice: voiceSelect.value,
+      captions: captionsToggle.checked,
+      textOnly: textOnlyToggle.checked,
+    }),
   );
 };
 voiceSelect.addEventListener("change", savePrefs);
@@ -116,6 +122,59 @@ captionsToggle.addEventListener("change", () => {
   savePrefs();
   if (!captionsToggle.checked) clearPartialBubbles();
 });
+textOnlyToggle.addEventListener("change", () => {
+  savePrefs();
+  applyTextOnlyMode();
+});
+
+// Apply initial mute state based on saved preference.
+remoteAudio.muted = textOnlyToggle.checked;
+if (textOnlyToggle.checked) {
+  captionsToggle.checked = true;
+  captionsToggle.disabled = true;
+}
+
+function applyTextOnlyMode() {
+  const textOnly = textOnlyToggle.checked;
+  remoteAudio.muted = textOnly;
+  if (textOnly) {
+    captionsToggle.checked = true;
+    captionsToggle.disabled = true;
+  } else {
+    captionsToggle.disabled = false;
+  }
+  if (state.dc && state.dc.readyState === "open") {
+    state.dc.send(JSON.stringify(buildSessionUpdate()));
+  }
+}
+
+function buildSessionUpdate() {
+  const textOnly = textOnlyToggle.checked;
+  return {
+    type: "session.update",
+    session: {
+      type: "realtime",
+      instructions: TRANSLATOR_INSTRUCTIONS,
+      output_modalities: textOnly ? ["text"] : ["audio", "text"],
+      audio: {
+        input: {
+          transcription: { model: "gpt-4o-mini-transcribe" },
+          turn_detection: {
+            type: "server_vad",
+            threshold: 0.55,
+            prefix_padding_ms: 250,
+            silence_duration_ms: 600,
+            create_response: true,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          voice: voiceSelect.value,
+        },
+      },
+    },
+  };
+}
 
 settingsBtn.addEventListener("click", () => settingsDialog.showModal());
 
@@ -225,6 +284,43 @@ function handleRealtimeEvent(evt) {
         appendBubble({
           id,
           side: "in",
+          lang: detectLangLabel(text),
+          text,
+          partial: false,
+        });
+      } else {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      }
+      break;
+    }
+
+    // --- output text (text-only mode: no audio is generated) ----------
+    case "response.output_text.delta":
+    case "response.text.delta": {
+      const id = `out-${evt.response_id}-${evt.item_id || ""}`;
+      const prev = state.partials.get(id) || "";
+      const next = prev + (evt.delta || "");
+      state.partials.set(id, next);
+      appendBubble({
+        id,
+        side: "out",
+        lang: detectLangLabel(next),
+        text: next,
+        partial: true,
+      });
+      setStatus("通訳中…", "speaking");
+      break;
+    }
+    case "response.output_text.done":
+    case "response.text.done": {
+      const id = `out-${evt.response_id}-${evt.item_id || ""}`;
+      const text = (evt.text || state.partials.get(id) || "").trim();
+      state.partials.delete(id);
+      if (text) {
+        appendBubble({
+          id,
+          side: "out",
           lang: detectLangLabel(text),
           text,
           partial: false,
@@ -357,31 +453,7 @@ async function start() {
     const dc = pc.createDataChannel("oai-events");
     state.dc = dc;
     dc.onopen = () => {
-      // Configure session for translation duty.
-      const sessionUpdate = {
-        type: "session.update",
-        session: {
-          type: "realtime",
-          instructions: TRANSLATOR_INSTRUCTIONS,
-          audio: {
-            input: {
-              transcription: { model: "gpt-4o-mini-transcribe" },
-              turn_detection: {
-                type: "server_vad",
-                threshold: 0.55,
-                prefix_padding_ms: 250,
-                silence_duration_ms: 600,
-                create_response: true,
-                interrupt_response: true,
-              },
-            },
-            output: {
-              voice: voiceSelect.value,
-            },
-          },
-        },
-      };
-      dc.send(JSON.stringify(sessionUpdate));
+      dc.send(JSON.stringify(buildSessionUpdate()));
     };
     dc.onmessage = (e) => {
       try {
