@@ -65,10 +65,10 @@ PC からは <http://localhost:8000> でアクセスできます。
 
 ---
 
-## スマホで試す
+## スマホで試す（ローカル開発）
 
-WebRTC とマイクアクセスは **HTTPS（または `localhost`）** が必須です。スマホから
-試すには以下のいずれかで HTTPS 終端を用意してください。
+WebRTC とマイクアクセスは **HTTPS（または `localhost`）** が必須です。PC で開発中に
+スマホから試すには以下のいずれかで HTTPS 終端を用意してください。
 
 ### 例: Cloudflare Tunnel（無料・推奨）
 
@@ -86,6 +86,77 @@ ngrok http 8000
 
 スマホ側でマイクの許可を出して `START` を押せば通訳が始まります。`STOP` でセッション
 終了。設定 (⚙) から音声 (`marin` / `cedar` など) と字幕の有無を変更できます。
+
+---
+
+## VPS に常駐させる（Docker + Caddy）
+
+PC を起動し続けないために、Docker compose で **アプリ + Caddy リバースプロキシ**を
+立てて自動 HTTPS にする構成です。
+
+### 前提
+
+- VPS で 80 / 443 / 22 が空いていて、Docker と Docker Compose がインストール済み
+- 公開できるホスト名がある。**ドメインがなくても OK**：
+  - 一番楽: [DuckDNS](https://www.duckdns.org/) で無料サブドメインを取得し、A レコードを VPS の IP に設定
+  - もっと楽: `sslip.io` を使う。VPS の IP が `203.0.113.9` なら `203-0-113-9.sslip.io` がそのまま使える
+
+### 1. ファイルを VPS に置く
+
+```bash
+ssh user@your-vps
+git clone https://github.com/jtakuya3/kane.git
+cd kane
+git checkout claude/realtime-translation-app-1KZlX
+```
+
+### 2. `.env` を作る
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+最低限これらを埋めます：
+
+```env
+OPENAI_API_KEY=sk-...
+KANE_ACCESS_TOKEN=$(openssl rand -hex 24 を入れる)
+KANE_HOST=kane-yours.duckdns.org   # または 203-0-113-9.sslip.io
+LETSENCRYPT_EMAIL=you@example.com
+```
+
+### 3. 起動
+
+```bash
+docker compose up -d --build
+docker compose logs -f caddy   # 証明書取得を確認
+```
+
+Caddy が Let's Encrypt 証明書を自動取得します。`https://<KANE_HOST>` をスマホで開
+くと、最初にパスワード（`KANE_ACCESS_TOKEN`）の入力を求められます。
+
+### 4. アップデート / 再起動
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+### トラブルシュート
+
+- 証明書が取れない: `KANE_HOST` の DNS が VPS の IP に向いているか / 80・443 ポート
+  がファイアウォールで開いているか確認。`docker compose logs caddy` を見る。
+- スマホからマイクが動かない: ブラウザの URL バーに鍵マーク (HTTPS) が出ているか。
+- 401 が返る: ブラウザの「合言葉」入力でタイポしていないか、`KANE_ACCESS_TOKEN` が
+  サーバ側と一致しているか。
+
+### セキュリティのポイント
+
+- `KANE_ACCESS_TOKEN` はブラウザの localStorage に保存されます。物理的にスマホを
+  触れる人はアクセスできるので、共有用途なら定期的にトークンをローテートしてください。
+- API レートリミットは未実装。気になる場合は Caddy で `rate_limit` プラグインを
+  足すか、OpenAI 側の使用量上限を設定するのが手っ取り早いです。
 
 ---
 

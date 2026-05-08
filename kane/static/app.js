@@ -40,6 +40,66 @@ const voiceSelect = $("voice-select");
 const captionsToggle = $("captions-toggle");
 const remoteAudio = $("remote-audio");
 const modelNameEl = $("model-name");
+const loginDialog = $("login");
+const loginForm = $("login-form");
+const loginPassword = $("login-password");
+const loginError = $("login-error");
+
+// ---------------------------------------------------------------------------
+// Access token (optional shared password). Stored in localStorage.
+// ---------------------------------------------------------------------------
+const TOKEN_KEY = "kane.token";
+let accessToken = localStorage.getItem(TOKEN_KEY) || null;
+
+function authHeaders() {
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+}
+
+async function ensureAuth() {
+  // Ask the server whether it requires a password at all.
+  let required = false;
+  try {
+    const r = await fetch("/api/auth-required");
+    if (r.ok) required = !!(await r.json()).required;
+  } catch {
+    /* ignore — assume not required */
+  }
+  if (!required) return;
+
+  // Validate any cached token first.
+  if (accessToken) {
+    const r = await fetch("/api/auth", { method: "POST", headers: authHeaders() });
+    if (r.ok) return;
+    accessToken = null;
+    localStorage.removeItem(TOKEN_KEY);
+  }
+
+  // Prompt the user.
+  await new Promise((resolve) => {
+    loginDialog.showModal();
+    loginPassword.focus();
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      loginError.style.display = "none";
+      const pw = loginPassword.value;
+      const r = await fetch("/api/auth", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${pw}` },
+      });
+      if (r.ok) {
+        accessToken = pw;
+        localStorage.setItem(TOKEN_KEY, pw);
+        loginDialog.close();
+        resolve();
+      } else {
+        loginError.style.display = "block";
+        loginPassword.select();
+      }
+    });
+  });
+}
+
+ensureAuth();
 
 // Restore preferences
 const prefs = JSON.parse(localStorage.getItem("kane.prefs") || "{}");
@@ -259,9 +319,14 @@ async function start() {
     // 2) Ephemeral key
     const sessionResp = await fetch("/api/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ voice: voiceSelect.value }),
     });
+    if (sessionResp.status === 401) {
+      accessToken = null;
+      localStorage.removeItem(TOKEN_KEY);
+      throw new Error("認証が切れました。ページを再読み込みしてください。");
+    }
     if (!sessionResp.ok) {
       throw new Error(`Failed to create session: ${sessionResp.status} ${await sessionResp.text()}`);
     }

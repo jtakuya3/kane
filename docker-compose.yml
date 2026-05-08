@@ -1,0 +1,48 @@
+# Kane production stack.
+#
+# Required env vars (set in `.env` next to this file):
+#   OPENAI_API_KEY        OpenAI API key (server-side only).
+#   KANE_ACCESS_TOKEN     Shared password the browser must send.
+#   KANE_HOST             Public hostname pointing at this VPS, e.g.
+#                         "kane-yours.duckdns.org" or "1.2.3.4.sslip.io".
+#   LETSENCRYPT_EMAIL     Contact e-mail for Let's Encrypt notifications.
+#
+# Optional:
+#   OPENAI_REALTIME_MODEL (default gpt-realtime-2)
+#   OPENAI_REALTIME_VOICE (default marin)
+#
+# Run:
+#   docker compose up -d --build
+
+services:
+  kane:
+    build: .
+    image: kane:latest
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set in .env}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime-2}
+      OPENAI_REALTIME_VOICE: ${OPENAI_REALTIME_VOICE:-marin}
+      KANE_ACCESS_TOKEN: ${KANE_ACCESS_TOKEN:?set in .env}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - kane
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      KANE_HOST: ${KANE_HOST:?set in .env}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

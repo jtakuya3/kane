@@ -1,0 +1,28 @@
+# Caddy reverse proxy for Kane.
+#
+# Caddy will automatically obtain a Let's Encrypt certificate as long as
+# {$KANE_HOST} resolves to this server's public IP and ports 80/443 are open.
+#
+# Set the e-mail used for ACME notifications via {$LETSENCRYPT_EMAIL}.
+
+{
+    email {$LETSENCRYPT_EMAIL}
+}
+
+{$KANE_HOST} {
+    encode zstd gzip
+
+    # Long timeouts so the SDP exchange and any future SSE works.
+    reverse_proxy kane:8000 {
+        flush_interval -1
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+        }
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

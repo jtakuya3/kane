@@ -299,6 +299,18 @@ body {
   border-radius: 10px;
   cursor: pointer;
 }
+.settings .primary {
+  background: var(--accent-strong);
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings .primary:active {
+  transform: scale(0.97);
+}
 code {
   background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;

@@ -74,6 +74,23 @@
 
     <audio id="remote-audio" autoplay playsinline></audio>
 
+    <dialog id="login" class="settings login">
+      <form id="login-form" class="settings__form">
+        <h2>パスワード</h2>
+        <p class="muted small">この Kane インスタンスはアクセス制限されています。</p>
+        <label class="field">
+          <span>合言葉</span>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="login-error" class="muted small" style="color: var(--danger); display: none;">
+          パスワードが違います。
+        </p>
+        <menu>
+          <button type="submit" class="primary">入室</button>
+        </menu>
+      </form>
+    </dialog>
+
     <script src="./app.js" type="module"></script>
   </body>
 </html>
