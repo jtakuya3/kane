@@ -94,14 +94,44 @@ ngrok http 8000
 PC を起動し続けないために、Docker compose で **アプリ + Caddy リバースプロキシ**を
 立てて自動 HTTPS にする構成です。
 
-### 前提
+### 🚀 ワンショット手順（推奨）
+
+DigitalOcean などの Ubuntu/Debian な VPS で、SSH 接続して以下 3 行:
+
+```bash
+git clone https://github.com/jtakuya3/kane.git
+cd kane && git checkout claude/realtime-translation-app-1KZlX
+bash scripts/quickstart.sh
+```
+
+`scripts/quickstart.sh` が次をすべて自動でやります:
+
+- Docker / docker compose が無ければインストール
+- 公開 IP を検出して `<ip>.sslip.io` を `KANE_HOST` に設定（**DNS 設定不要**）
+- ランダムな `KANE_ACCESS_TOKEN`（パスワード）を生成
+- `OPENAI_API_KEY` をプロンプトで聞いて `.env` に保存
+- UFW で 80/443 を開放
+- `docker compose up -d --build` で起動
+- Let's Encrypt 証明書取得を待って URL とパスワードを表示
+
+完了するとターミナルに `https://...sslip.io` の URL とパスワードが出るので、
+スマホで開いてパスワードを入力 → マイク許可 → `START` で通訳開始。
+
+> **所要時間目安**: 初めての VPS でも 15〜25 分（Docker のインストールとイメージ
+> ビルドにかかる時間でほぼ決まります）。
+
+### 手動で構成する場合
+
+`scripts/quickstart.sh` を使わずに自分で `.env` を埋めたい場合は次のとおり。
+
+#### 前提
 
 - VPS で 80 / 443 / 22 が空いていて、Docker と Docker Compose がインストール済み
 - 公開できるホスト名がある。**ドメインがなくても OK**：
-  - 一番楽: [DuckDNS](https://www.duckdns.org/) で無料サブドメインを取得し、A レコードを VPS の IP に設定
-  - もっと楽: `sslip.io` を使う。VPS の IP が `203.0.113.9` なら `203-0-113-9.sslip.io` がそのまま使える
+  - 一番楽: VPS の IP が `203.0.113.9` なら `203-0-113-9.sslip.io` がそのまま使える
+  - もしくは [DuckDNS](https://www.duckdns.org/) で無料サブドメイン
 
-### 1. ファイルを VPS に置く
+#### 1. ファイルを VPS に置く
 
 ```bash
 ssh user@your-vps
@@ -110,7 +140,7 @@ cd kane
 git checkout claude/realtime-translation-app-1KZlX
 ```
 
-### 2. `.env` を作る
+#### 2. `.env` を作る
 
 ```bash
 cp .env.example .env
@@ -122,11 +152,11 @@ nano .env
 ```env
 OPENAI_API_KEY=sk-...
 KANE_ACCESS_TOKEN=$(openssl rand -hex 24 を入れる)
-KANE_HOST=kane-yours.duckdns.org   # または 203-0-113-9.sslip.io
+KANE_HOST=203-0-113-9.sslip.io     # または kane-yours.duckdns.org
 LETSENCRYPT_EMAIL=you@example.com
 ```
 
-### 3. 起動
+#### 3. 起動
 
 ```bash
 docker compose up -d --build
@@ -136,7 +166,7 @@ docker compose logs -f caddy   # 証明書取得を確認
 Caddy が Let's Encrypt 証明書を自動取得します。`https://<KANE_HOST>` をスマホで開
 くと、最初にパスワード（`KANE_ACCESS_TOKEN`）の入力を求められます。
 
-### 4. アップデート / 再起動
+#### 4. アップデート / 再起動
 
 ```bash
 git pull
