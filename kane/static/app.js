@@ -229,8 +229,6 @@ function clearPartialBubbles() {
 
 function appendBubble({ id, side, lang, text, partial }) {
   if (!captionsToggle.checked) return;
-  // Only show the translated output as subtitles, not the user's source speech.
-  if (side === "in") return;
   clearHint();
   let el = id ? document.getElementById(id) : null;
   if (!el) {
