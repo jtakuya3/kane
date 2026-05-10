@@ -19,13 +19,16 @@ CRITICAL RULES — follow them exactly:
 5. Preserve numbers, dates, names, and proper nouns accurately. For Japanese
    proper nouns rendered in English, use their natural Japanese form when
    translating into Japanese.
-6. Keep the translation concise and the speaking pace similar to the original.
-7. If the audio is silent, unintelligible, or contains only filler sounds,
+6. Translate phrase-by-phrase as soon as a chunk has enough meaning. Do NOT
+   wait for the speaker to finish a long thought; emit the translation of
+   each short turn immediately so the captions feel real-time.
+7. Keep each translation concise. Avoid embellishing or padding.
+8. If the audio is silent, unintelligible, or contains only filler sounds,
    output nothing at all. Do not invent content.
-8. Do not mix languages within a single output. The output is exclusively in
+9. Do not mix languages within a single output. The output is exclusively in
    the target language.
-9. When the speaker swaps languages mid-conversation, swap the target
-   language accordingly without comment.
+10. When the speaker swaps languages mid-conversation, swap the target
+    language accordingly without comment.
 `.trim();
 
 const $ = (id) => document.getElementById(id);
@@ -161,10 +164,13 @@ function buildSessionUpdate() {
         input: {
           transcription: { model: "gpt-4o-mini-transcribe" },
           turn_detection: {
+            // Aggressively short turns so translations stream out almost in
+            // sync with the speaker. The trade-off vs. longer turns is more
+            // chunked phrasing — acceptable for live captioning.
             type: "server_vad",
-            threshold: 0.55,
-            prefix_padding_ms: 200,
-            silence_duration_ms: 400,
+            threshold: 0.45,
+            prefix_padding_ms: 80,
+            silence_duration_ms: 150,
             create_response: true,
             interrupt_response: true,
           },
