@@ -33,6 +33,8 @@ CRITICAL RULES — follow them exactly:
 
 const $ = (id) => document.getElementById(id);
 const transcriptEl = $("transcript");
+const columnInEl = $("column-in");
+const columnOutEl = $("column-out");
 const statusEl = $("status");
 const talkBtn = $("talk-btn");
 const muteBtn = $("mute-btn");
@@ -217,11 +219,6 @@ function setTalkState(s) {
 // ---------------------------------------------------------------------------
 // Captions
 // ---------------------------------------------------------------------------
-function clearHint() {
-  const hint = transcriptEl.querySelector(".hint");
-  if (hint) hint.remove();
-}
-
 function clearPartialBubbles() {
   for (const el of transcriptEl.querySelectorAll(".bubble--partial")) el.remove();
   state.partials.clear();
@@ -229,7 +226,7 @@ function clearPartialBubbles() {
 
 function appendBubble({ id, side, lang, text, partial }) {
   if (!captionsToggle.checked) return;
-  clearHint();
+  const parentEl = side === "in" ? columnInEl : columnOutEl;
   let el = id ? document.getElementById(id) : null;
   if (!el) {
     el = document.createElement("div");
@@ -242,12 +239,11 @@ function appendBubble({ id, side, lang, text, partial }) {
     textEl.className = "bubble__text";
     el.appendChild(langEl);
     el.appendChild(textEl);
-    transcriptEl.appendChild(el);
+    parentEl.appendChild(el);
   }
   el.classList.toggle("bubble--partial", !!partial);
   el.querySelector(".bubble__text").textContent = text;
-  // Auto scroll
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  parentEl.scrollTop = parentEl.scrollHeight;
 }
 
 // Heuristic: detect Japanese characters

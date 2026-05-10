@@ -21,10 +21,14 @@
     </header>
 
     <main class="transcript" id="transcript" aria-live="polite">
-      <p class="hint">
-        START を押すと、右に発話、左に翻訳が同時に流れます。<br />
-        英語 ⇄ 日本語、リアルタイム。
-      </p>
+      <section class="column column--in">
+        <header class="column__header">原文</header>
+        <div class="column__list" id="column-in"></div>
+      </section>
+      <section class="column column--out">
+        <header class="column__header">翻訳</header>
+        <div class="column__list" id="column-out"></div>
+      </section>
     </main>
 
     <footer class="dock">
