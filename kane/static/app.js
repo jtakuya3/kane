@@ -165,15 +165,17 @@ function buildSessionUpdate() {
         input: {
           transcription: { model: "gpt-4o-mini-transcribe" },
           turn_detection: {
-            // Aggressively short turns so translations stream out almost in
-            // sync with the speaker. The trade-off vs. longer turns is more
-            // chunked phrasing — acceptable for live captioning.
+            // Pipeline mode: short turns so phrase 1 starts translating the
+            // moment it ends, AND interrupt_response is OFF so phrase 1's
+            // translation keeps streaming while the user is already talking
+            // phrase 2. The next phrase is captured in the background and
+            // translated as soon as the current one finishes.
             type: "server_vad",
             threshold: 0.45,
             prefix_padding_ms: 80,
             silence_duration_ms: 150,
             create_response: true,
-            interrupt_response: true,
+            interrupt_response: false,
           },
         },
         output: {
