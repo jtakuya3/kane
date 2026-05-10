@@ -106,7 +106,8 @@ ensureAuth();
 const prefs = JSON.parse(localStorage.getItem("kane.prefs") || "{}");
 if (prefs.voice) voiceSelect.value = prefs.voice;
 if (typeof prefs.captions === "boolean") captionsToggle.checked = prefs.captions;
-if (typeof prefs.textOnly === "boolean") textOnlyToggle.checked = prefs.textOnly;
+// Default subtitle-only mode ON unless the user has explicitly turned it off.
+textOnlyToggle.checked = typeof prefs.textOnly === "boolean" ? prefs.textOnly : true;
 const savePrefs = () => {
   localStorage.setItem(
     "kane.prefs",
@@ -162,8 +163,8 @@ function buildSessionUpdate() {
           turn_detection: {
             type: "server_vad",
             threshold: 0.55,
-            prefix_padding_ms: 250,
-            silence_duration_ms: 600,
+            prefix_padding_ms: 200,
+            silence_duration_ms: 400,
             create_response: true,
             interrupt_response: true,
           },
@@ -187,6 +188,10 @@ const state = {
   micStream: /** @type {MediaStream|null} */ (null),
   active: false,
   muted: false,
+  // True once the user has successfully started a session. Set back to false
+  // by the explicit STOP button — used to auto-reconnect on transient drops.
+  autoReconnect: false,
+  reconnectTimer: /** @type {number|null} */ (null),
   // Per-event-id partial bubbles for streaming captions
   partials: new Map(),
 };
@@ -439,8 +444,14 @@ async function start() {
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        setStatus("接続が切れました", "error");
-        stop();
+        if (state.autoReconnect) {
+          setStatus("再接続中…", "connecting");
+          cleanup({ keepAutoReconnect: true });
+          scheduleReconnect();
+        } else {
+          setStatus("接続が切れました", "error");
+          stop();
+        }
       }
     };
 
@@ -482,6 +493,7 @@ async function start() {
     await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
     state.active = true;
+    state.autoReconnect = true;
     setTalkState("active");
     talkBtn.disabled = false;
     muteBtn.disabled = false;
@@ -496,7 +508,15 @@ async function start() {
   }
 }
 
-function cleanup() {
+function scheduleReconnect(delayMs = 1500) {
+  if (state.reconnectTimer != null) return;
+  state.reconnectTimer = window.setTimeout(() => {
+    state.reconnectTimer = null;
+    if (state.autoReconnect && !state.active) start();
+  }, delayMs);
+}
+
+function cleanup({ keepAutoReconnect = false } = {}) {
   if (state.dc) {
     try {
       state.dc.close();
@@ -516,14 +536,19 @@ function cleanup() {
   state.active = false;
   state.muted = false;
   state.partials.clear();
+  if (!keepAutoReconnect) state.autoReconnect = false;
   muteBtn.dataset.state = "";
   muteBtn.textContent = "🎤";
   muteBtn.disabled = true;
   endBtn.disabled = true;
-  setTalkState("idle");
+  setTalkState(keepAutoReconnect ? "connecting" : "idle");
 }
 
 function stop() {
+  if (state.reconnectTimer != null) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
   cleanup();
   setStatus("待機中", "idle");
 }
