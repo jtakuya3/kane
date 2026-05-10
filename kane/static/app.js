@@ -33,7 +33,6 @@ CRITICAL RULES — follow them exactly:
 
 const $ = (id) => document.getElementById(id);
 const transcriptEl = $("transcript");
-const columnInEl = $("column-in");
 const columnOutEl = $("column-out");
 const statusEl = $("status");
 const talkBtn = $("talk-btn");
@@ -226,7 +225,9 @@ function clearPartialBubbles() {
 
 function appendBubble({ id, side, lang, text, partial }) {
   if (!captionsToggle.checked) return;
-  const parentEl = side === "in" ? columnInEl : columnOutEl;
+  // Show only the translation, never the source-language transcription.
+  if (side === "in") return;
+  const parentEl = columnOutEl;
   let el = id ? document.getElementById(id) : null;
   if (!el) {
     el = document.createElement("div");
