@@ -1,11 +1,13 @@
 [tool.poetry]
 name = "kane"
 version = "0.1.0"
-description = ""
+description = "シンプルな研修動画LMS（Learning Management System）"
 authors = ["Takuya Kanesaki"]
+packages = [{ include = "kane" }]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+flask = "^3.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

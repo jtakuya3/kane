@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ course['title'] }} — Kane LMS{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <a class="back-link" href="{{ url_for('dashboard') }}">← コース一覧</a>
+        <h1>{{ course['title'] }}</h1>
+        {% if course['description'] %}<p class="muted">{{ course['description'] }}</p>{% endif %}
+    </div>
+    <form method="post" action="{{ url_for('delete_course', course_id=course['id']) }}"
+          onsubmit="return confirm('このコースと全ての動画を削除します。よろしいですか？');">
+        <button type="submit" class="btn btn-danger">コースを削除</button>
+    </form>
+</div>
+
+<section class="panel">
+    <h2>🎬 研修動画</h2>
+    <form method="post" action="{{ url_for('upload_video', course_id=course['id']) }}"
+          enctype="multipart/form-data" class="upload-form">
+        <div class="field">
+            <label for="title">タイトル（任意・未入力ならファイル名）</label>
+            <input type="text" id="title" name="title">
+        </div>
+        <div class="field">
+            <label for="description">説明（任意）</label>
+            <input type="text" id="description" name="description">
+        </div>
+        <div class="field">
+            <label for="video">動画ファイル（mp4 / webm / mov / m4v / ogg）</label>
+            <input type="file" id="video" name="video" accept="video/*" required>
+        </div>
+        <button type="submit" class="btn btn-primary">アップロード</button>
+    </form>
+
+    {% if videos %}
+    <ol class="video-list">
+        {% for v in videos %}
+        <li class="video-item">
+            <div class="video-main">
+                <strong>{{ v['title'] }}</strong>
+                {% if v['description'] %}<span class="muted"> — {{ v['description'] }}</span>{% endif %}
+                <div class="video-sub muted">
+                    {{ '%.1f'|format(v['size_bytes'] / 1048576) }} MB · {{ v['original_name'] }}
+                </div>
+            </div>
+            <form method="post"
+                  action="{{ url_for('delete_video', course_id=course['id'], video_id=v['id']) }}"
+                  onsubmit="return confirm('この動画を削除しますか？');">
+                <button type="submit" class="btn btn-small btn-danger">削除</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="empty">まだ動画がありません。上のフォームからアップロードしてください。</p>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <h2>🔗 クライアント共有リンク</h2>
+    <p class="muted">リンクを知っているクライアントはログイン不要で動画を視聴できます。</p>
+    <form method="post" action="{{ url_for('create_share', course_id=course['id']) }}" class="share-form">
+        <div class="field">
+            <label for="client_name">クライアント名（任意・管理用メモ）</label>
+            <input type="text" id="client_name" name="client_name" placeholder="例: 株式会社サンプル">
+        </div>
+        <div class="field">
+            <label for="expires_days">有効期限（日数・空欄で無期限）</label>
+            <input type="number" id="expires_days" name="expires_days" min="1" placeholder="30">
+        </div>
+        <button type="submit" class="btn btn-primary">共有リンクを発行</button>
+    </form>
+
+    {% if shares %}
+    <table class="share-table">
+        <thead>
+            <tr><th>クライアント</th><th>リンク</th><th>有効期限</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for s in shares %}
+            {% set share_url = url_for('share_view', token=s['token'], _external=True) %}
+            <tr>
+                <td>{{ s['client_name'] or '—' }}</td>
+                <td>
+                    <input class="share-url" type="text" readonly value="{{ share_url }}"
+                           onclick="this.select(); document.execCommand('copy');"
+                           title="クリックでコピー">
+                </td>
+                <td>{{ s['expires_at'][:10] if s['expires_at'] else '無期限' }}</td>
+                <td>
+                    <form method="post"
+                          action="{{ url_for('delete_share', course_id=course['id'], share_id=s['id']) }}"
+                          onsubmit="return confirm('この共有リンクを無効化しますか？');">
+                        <button type="submit" class="btn btn-small btn-danger">無効化</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">共有リンクはまだありません。</p>
+    {% endif %}
+</section>
+{% endblock %}

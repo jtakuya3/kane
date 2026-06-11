@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}コース一覧 — Kane LMS{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>研修コース一覧</h1>
+</div>
+
+<details class="panel new-course">
+    <summary>＋ 新しいコースを作成</summary>
+    <form method="post" action="{{ url_for('create_course') }}">
+        <label for="title">コース名</label>
+        <input type="text" id="title" name="title" placeholder="例: 新入社員研修 2026" required>
+        <label for="description">説明（任意）</label>
+        <textarea id="description" name="description" rows="2"></textarea>
+        <button type="submit" class="btn btn-primary">作成する</button>
+    </form>
+</details>
+
+{% if courses %}
+<div class="card-grid">
+    {% for course in courses %}
+    <a class="card" href="{{ url_for('course_detail', course_id=course['id']) }}">
+        <h2>{{ course['title'] }}</h2>
+        {% if course['description'] %}<p class="muted">{{ course['description'] }}</p>{% endif %}
+        <div class="card-meta">
+            <span>🎬 動画 {{ course['video_count'] }}本</span>
+            <span>🔗 共有 {{ course['share_count'] }}件</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">まだコースがありません。上のフォームから最初のコースを作成しましょう。</p>
+{% endif %}
+{% endblock %}

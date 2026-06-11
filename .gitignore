@@ -37,3 +37,7 @@ ENV/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Kane LMS instance data (uploaded videos & local DB)
+instance/
+kane/instance/

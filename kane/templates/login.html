@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}ログイン — Kane LMS{% endblock %}
+{% block content %}
+<div class="auth-card">
+    <h1>管理者ログイン</h1>
+    <p class="muted">研修動画を管理するにはログインしてください。</p>
+    <form method="post" action="{{ url_for('login') }}">
+        <label for="password">パスワード</label>
+        <input type="password" id="password" name="password" autofocus required>
+        <button type="submit" class="btn btn-primary">ログイン</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ course['title'] }} — 研修動画</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="share-body">
+    <header class="site-header">
+        <div class="container header-inner">
+            <span class="brand">🎓 研修動画</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="page-head">
+            <div>
+                <h1>{{ course['title'] }}</h1>
+                {% if course['description'] %}<p class="muted">{{ course['description'] }}</p>{% endif %}
+            </div>
+        </div>
+
+        {% if videos %}
+        <div class="share-player">
+            <video id="player" controls controlslist="nodownload" playsinline
+                   src="{{ url_for('share_video_file', token=token, video_id=videos[0]['id']) }}">
+                お使いのブラウザは動画再生に対応していません。
+            </video>
+            <h2 id="now-title">{{ videos[0]['title'] }}</h2>
+            <p id="now-desc" class="muted">{{ videos[0]['description'] }}</p>
+        </div>
+
+        <ol class="playlist">
+            {% for v in videos %}
+            <li>
+                <button type="button" class="playlist-item{% if loop.first %} active{% endif %}"
+                        data-src="{{ url_for('share_video_file', token=token, video_id=v['id']) }}"
+                        data-title="{{ v['title'] }}"
+                        data-desc="{{ v['description'] }}">
+                    <span class="playlist-no">{{ loop.index }}</span>
+                    <span class="playlist-title">{{ v['title'] }}</span>
+                </button>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p class="empty">このコースにはまだ動画が登録されていません。</p>
+        {% endif %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">Powered by Kane LMS</div>
+    </footer>
+
+    <script>
+        (function () {
+            var player = document.getElementById('player');
+            var nowTitle = document.getElementById('now-title');
+            var nowDesc = document.getElementById('now-desc');
+            var items = document.querySelectorAll('.playlist-item');
+            items.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    player.src = btn.getAttribute('data-src');
+                    player.play();
+                    nowTitle.textContent = btn.getAttribute('data-title');
+                    nowDesc.textContent = btn.getAttribute('data-desc');
+                    items.forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

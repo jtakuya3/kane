@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Kane LMS{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a class="brand" href="{{ url_for('dashboard') }}">🎓 Kane LMS</a>
+            {% if session.get('is_admin') %}
+            <nav class="nav">
+                <a href="{{ url_for('dashboard') }}">コース一覧</a>
+                <a href="{{ url_for('logout') }}">ログアウト</a>
+            </nav>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">Kane LMS — 研修動画共有システム</div>
+    </footer>
+</body>
+</html>
