@@ -97,9 +97,13 @@ def list_models(api_key: str, query: str) -> None:
             print(f"{m['id']}\t{m.get('name', '')}")
 
 
-def stream_chat(api_key: str, model: str, messages: list[dict]) -> str:
+def stream_chat(
+    api_key: str, model: str, messages: list[dict], options: dict | None = None
+) -> str:
     """Send a chat completion request and stream the reply to stdout."""
     payload = {"model": model, "messages": messages, "stream": True}
+    if options:
+        payload.update(options)
     req = _request(f"{API_BASE}/chat/completions", api_key, payload)
     reply_parts: list[str] = []
     try:
@@ -129,9 +133,14 @@ def stream_chat(api_key: str, model: str, messages: list[dict]) -> str:
     return "".join(reply_parts)
 
 
-def repl(api_key: str, model: str, system_prompt: str | None) -> None:
+def repl(api_key: str, model: str, system_prompt: str | None, options: dict) -> None:
     print(f"モデル: {model}")
-    print("チャットを開始します。終了は /exit、履歴クリアは /clear。\n")
+    if options:
+        print(f"オプション: {json.dumps(options, ensure_ascii=False)}")
+    print(
+        "チャットを開始します。終了は /exit、履歴クリアは /clear、"
+        "モデル切替は /model <ID>。\n"
+    )
     messages: list[dict] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -149,10 +158,18 @@ def repl(api_key: str, model: str, system_prompt: str | None) -> None:
             messages = messages[:1] if system_prompt else []
             print("履歴をクリアしました。\n")
             continue
+        if user_input.startswith("/model"):
+            new_model = user_input[len("/model"):].strip()
+            if new_model:
+                model = new_model
+                print(f"モデルを {model} に切り替えました。\n")
+            else:
+                print(f"現在のモデル: {model}\n")
+            continue
         messages.append({"role": "user", "content": user_input})
         print(f"{model.split('/')[-1]}> ", end="", flush=True)
         try:
-            reply = stream_chat(api_key, model, messages)
+            reply = stream_chat(api_key, model, messages, options)
         except (RuntimeError, urllib.error.URLError, TimeoutError) as e:
             print(f"\nエラー: {e}", file=sys.stderr)
             messages.pop()  # keep history consistent with what the model saw
@@ -170,6 +187,14 @@ def main() -> None:
     )
     parser.add_argument("--system", default=None, help="system prompt")
     parser.add_argument(
+        "--reasoning",
+        choices=["low", "medium", "high"],
+        default=None,
+        help="enable model reasoning at the given effort (recommended: high)",
+    )
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--max-tokens", type=int, default=None)
+    parser.add_argument(
         "--list-models",
         metavar="QUERY",
         default=None,
@@ -184,8 +209,16 @@ def main() -> None:
         list_models(api_key, args.list_models)
         return
 
+    options: dict = {}
+    if args.reasoning:
+        options["reasoning"] = {"effort": args.reasoning}
+    if args.temperature is not None:
+        options["temperature"] = args.temperature
+    if args.max_tokens is not None:
+        options["max_tokens"] = args.max_tokens
+
     model = args.model or resolve_model(api_key, DEFAULT_MODEL_QUERY)
-    repl(api_key, model, args.system)
+    repl(api_key, model, args.system, options)
 
 
 if __name__ == "__main__":
