@@ -24,7 +24,7 @@ def load_dotenv(path: str = ".env") -> None:
     """Load KEY=VALUE pairs from a .env file into os.environ (no overwrite)."""
     if not os.path.isfile(path):
         return
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
