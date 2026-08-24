@@ -7,6 +7,9 @@ authors = ["Takuya Kanesaki"]
 [tool.poetry.dependencies]
 python = "^3.12"
 
+[tool.poetry.scripts]
+oxalpha-chat = "kane.oxalpha_chat:main"
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 black = "^24.1.1"
