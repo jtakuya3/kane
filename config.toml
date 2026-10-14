@@ -11,12 +11,13 @@ password_file = "C:/Users/takuy/Downloads/kabu_api_word.txt"
 
 [slack]
 enabled = false   # Slackには送らない（画面のアラート窓のみ）。送る場合は true
-webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"
+# webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"   # Slackは使わない
 
 [notify]
 beep = false   # true にするとWindowsの通知音も鳴らす
 feed = true     # 画面右上のアラート窓（最前面）に全通知を流す
 popup_rules = ["R13", "R14:剥がれ", "R14:警戒"]   # アラート窓で赤く強調＋音（ルール名 or ルール名:レベル）
+quiet_after = "15:25"   # この時刻以降はアラート窓・音を出さない（記録は続ける）
 dialog = false  # true にすると popup_rules の通知でメッセージボックスも出す（フォーカスを奪うので注意）
 
 [paths]

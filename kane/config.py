@@ -114,6 +114,7 @@ class Config:
     popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
     feed: bool = True  # 画面のアラート窓に全通知を流す
     dialog: bool = False  # popup_rules の通知でメッセージボックスも出す
+    quiet_after: str | None = "15:25"  # この時刻以降はアラート窓・音を出さない
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)
@@ -170,7 +171,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         ws_url=kabu.get("ws_url", "ws://localhost:18080/kabusapi/websocket"),
         password_file=p(kabu["password_file"]) if kabu.get("password_file") else None,
         slack_webhook_file=p(slack["webhook_file"]) if slack.get("webhook_file") else None,
-        slack_enabled=slack.get("enabled", True),
+        slack_enabled=slack.get("enabled", False),
         beep=raw.get("notify", {}).get("beep", False),
         data_dir=p(paths.get("data_dir", "data")),
         symbols=load_symbols(p(paths.get("symbols_csv", "symbols.csv"))),
@@ -181,6 +182,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         popup_rules=raw.get("notify", {}).get("popup_rules", ["R13", "R14:剥がれ", "R14:警戒"]),
         feed=raw.get("notify", {}).get("feed", True),
         dialog=raw.get("notify", {}).get("dialog", False),
+        quiet_after=raw.get("notify", {}).get("quiet_after", "15:25"),
         scanner=scanner,
         source=raw.get("source", {}).get("type", "kabu"),
         rss=_rss_config(raw.get("rss", {})),

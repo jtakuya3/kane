@@ -6,6 +6,7 @@ import json
 import logging
 import urllib.request
 from datetime import date, datetime
+from datetime import time as dtime
 from pathlib import Path
 
 from .models import Alert, Bar, Snapshot
@@ -54,12 +55,16 @@ def decode_board(s: str | None):
 
 class Notifier:
     def __init__(self, webhook_file: Path | None, enabled: bool, beep: bool,
-                 feed: bool = False, dialog: bool = False):
+                 feed: bool = False, dialog: bool = False, quiet_after: str | None = None):
         self.url = None
         if enabled and webhook_file and webhook_file.exists():
             self.url = webhook_file.read_text(encoding="utf-8").strip() or None
         self.beep = beep
         self.dialog = dialog
+        self.quiet_after = None  # この時刻以降は画面表示・音・Slackを出さない（記録と黒い画面の表示のみ）
+        if quiet_after:
+            h, m = quiet_after.split(":")
+            self.quiet_after = dtime(int(h), int(m))
         self.feed = None
         if feed:
             from .feed import AlertFeed
@@ -69,6 +74,8 @@ class Notifier:
     def send(self, text: str, popup: bool = False, rule: str = ""):
         """popup=True は重要な通知（アラート窓で赤く強調、dialog 設定時はメッセージボックスも）。"""
         print(f"{datetime.now():%H:%M:%S} {text}", flush=True)
+        if self.quiet_after and datetime.now().time() >= self.quiet_after:
+            return
         if self.feed:
             self.feed.push(text, rule, popup)
         if popup and self.dialog:

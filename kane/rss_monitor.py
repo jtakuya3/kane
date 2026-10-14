@@ -29,7 +29,7 @@ class RssMonitor:
         r = cfg.rss
         wb = Path(r.workbook)
         self.rss = ExcelRss(r, wb if wb.is_absolute() else cfg.base_dir / wb)
-        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog)
+        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog, cfg.quiet_after)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
         self.watch = list(cfg.symbols)
         self.pinned = {s.code for s in self.watch}
@@ -80,7 +80,7 @@ class RssMonitor:
             srows = self.rss.read(SCAN_SHEET, len(self.scan), len(self.sf))
             got = sum(1 for r in srows if r and r[0] not in (None, ""))
             print(f"\nスキャン：{len(self.scan)}銘柄中 {got}銘柄で現在値を取得")
-        print("Slack:", "設定あり" if self.notifier.url else "未設定（画面表示のみ）")
+        print("Slack:", "送信する" if self.notifier.url else "送信しない（画面のアラート窓のみ）")
 
     # ---- 通知 ----
     def emit(self, alerts, snap_by_code):

@@ -73,14 +73,14 @@ def check(cfg: Config):
     except KabuError as e:
         print("ランキング取得失敗:", e)
     notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep)
-    print("Slack:", "設定あり" if notifier.url else "未設定（画面表示のみ）")
+    print("Slack:", "送信する" if notifier.url else "送信しない（画面のアラート窓のみ）")
 
 
 class Monitor:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.client = KabuClient(cfg.base_url, cfg.password_file)
-        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog)
+        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog, cfg.quiet_after)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
         self.engine = Engine(cfg.symbols, cfg.rules, on_bar=self.recorder.bar)
         self.start, self.end = _hm(cfg.session_start), _hm(cfg.session_end)
