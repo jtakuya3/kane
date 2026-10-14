@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 > nul
 cd /d %~dp0..
-python -m kane.monitor --check
+set PY=python
+where py > nul 2>&1 && set PY=py -3.11
+%PY% -m kane.monitor --check
 pause
