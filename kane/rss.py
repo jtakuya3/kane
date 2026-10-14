@@ -123,6 +123,23 @@ def load_universe(path: Path, exclude: set[str], limit: int) -> list[SymbolInfo]
     return out[:limit]
 
 
+BUSY = (-2147418111, -2147417846)  # Excelが計算中などで呼び出しを拒否した（しばらくすれば通る）
+
+
+def com_retry(fn, *args, tries: int = 240, wait: float = 0.5):
+    """Excelが「呼び出し先が呼び出しを拒否しました」を返したら、待って同じ操作をやり直す。"""
+    import time
+
+    for i in range(tries):
+        try:
+            return fn(*args)
+        except Exception as e:
+            code = getattr(e, "hresult", None) or (e.args[0] if e.args else None)
+            if code not in BUSY or i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
 class ExcelRss:
     """起動中の Excel にシートを作って RSS 関数を書き込み、値を読む。"""
 
@@ -164,19 +181,21 @@ class ExcelRss:
 
     def setup(self, name: str, codes: list[str], fields: list[tuple[str, str]]):
         """1行目に項目名、A列に銘柄コード、残りに RssMarket の式を書き込む。"""
-        ws = self._sheet(name)
-        ws.Cells.Clear()
+        ws = com_retry(self._sheet, name)
+        com_retry(lambda: ws.Cells.Clear())
         header = ["code"] + [item for _, item in fields]
         rows = [header] + [[c] + [formula(self.cfg, c, item) for _, item in fields] for c in codes]
-        rng = ws.Range(ws.Cells(1, 1), ws.Cells(len(rows), len(header)))
-        rng.Formula = rows
+
+        def write():
+            ws.Range(ws.Cells(1, 1), ws.Cells(len(rows), len(header))).Formula = rows
+        com_retry(write)
 
     def read(self, name: str, nrows: int, ncols: int):
         """データ部分（ヘッダーを除く nrows 行 × 項目 ncols 列）を読む。"""
-        ws = self._sheet(name)
+        ws = com_retry(self._sheet, name)
         if nrows == 0:
             return []
-        v = ws.Range(ws.Cells(2, 2), ws.Cells(nrows + 1, ncols + 1)).Value
+        v = com_retry(lambda: ws.Range(ws.Cells(2, 2), ws.Cells(nrows + 1, ncols + 1)).Value)
         if nrows == 1 and ncols == 1:
             return [[v]]
         if nrows == 1:

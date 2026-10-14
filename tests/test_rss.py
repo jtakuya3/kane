@@ -124,3 +124,27 @@ def test_load_baseline_old_and_new_format(tmp_path):
     i = apply_baseline(SymbolInfo("4498", "", None), b)
     assert i.avg_vol == 1000 and i.ytd_max_vol == 9000 and i.ytd_max_date == "2026/03/02"
     assert apply_baseline(SymbolInfo("9999", "", None), b).ytd_max_vol is None
+
+
+def test_com_retry_on_busy():
+    from kane.rss import com_retry
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise Exception(-2147418111, "呼び出し先が呼び出しを拒否しました。", None, None)
+        return "ok"
+    assert com_retry(flaky, wait=0) == "ok" and len(calls) == 3
+    import pytest
+    with pytest.raises(ValueError):
+        com_retry(lambda: (_ for _ in ()).throw(ValueError("x")), wait=0)
+
+
+def test_write_baseline_keeps_previous(tmp_path):
+    from kane.baseline import write_baseline
+    p = tmp_path / "baseline.csv"
+    p.write_text("code,avg_vol,days,ytd_max_vol,ytd_max_date,updated\n1111,5,60,9,2026/01/05,old\n2222,7,60,,,old\n")
+    write_baseline(p, {"2222": [("2026/10/13", 100.0)] * 20})
+    text = p.read_text()
+    assert "1111,5,60,9,2026/01/05,old" in text and "2222,100,20,100,2026/10/13" in text

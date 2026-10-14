@@ -20,7 +20,7 @@ from datetime import time as dtime
 from pathlib import Path
 
 from .config import load_config
-from .rss import ExcelRss, load_universe, num
+from .rss import ExcelRss, com_retry, load_universe, num
 
 SHEET = "kane_baseline"
 BLOCK = 12  # 1銘柄ぶんの表の列幅
@@ -65,32 +65,43 @@ def parse_chart_rows(table, today: date | None = None) -> list[tuple[str, float]
 BARS = 250  # 約1年分（平均出来高は直近60日、年初来の最大出来高は今年の分から計算）
 
 
-def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: float = 90.0) -> dict:
-    """RssChart を銘柄ごとに横に並べて書き込み、値が出そろったら読む（batch 銘柄ずつ）。"""
+def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: float = 90.0,
+                on_batch=None) -> dict:
+    """RssChart を銘柄ごとに横に並べて書き込み、値が出そろったら読む（batch 銘柄ずつ）。
+    Excelが計算中で呼び出しを拒否したときは待ってやり直す。on_batch(out) で途中経過を保存できる。"""
     rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
                    else cfg.base_dir / cfg.rss.workbook)
     rss.connect()
-    ws = rss._sheet(SHEET)
+    ws = com_retry(rss._sheet, SHEET)
     out = {}
+    t_all = time.time()
     for k in range(0, len(codes), batch):
         part = codes[k:k + batch]
-        ws.Cells.Clear()
+        com_retry(lambda: ws.Cells.Clear())
         for j, c in enumerate(part):
-            ws.Cells(1, 1 + j * BLOCK).Formula = chart_formula(c, bars, cfg.rss.code_suffix)
+            def put(j=j, c=c):
+                ws.Cells(1, 1 + j * BLOCK).Formula = chart_formula(c, bars, cfg.rss.code_suffix)
+            com_retry(put)
         t0 = time.time()
         pending = set(part)
         while pending and time.time() - t0 < wait:
             time.sleep(1.0)
+            # 1回でまとめて読む（Excelへの呼び出し回数を減らす）
+            table = com_retry(lambda: ws.Range(ws.Cells(1, 1), ws.Cells(bars + 3, len(part) * BLOCK)).Value)
             for j, c in enumerate(part):
                 if c not in pending:
                     continue
-                rng = ws.Range(ws.Cells(1, 1 + j * BLOCK), ws.Cells(bars + 3, (j + 1) * BLOCK))
-                rows = parse_chart_rows(rng.Value)
+                rows = parse_chart_rows([r[j * BLOCK:(j + 1) * BLOCK] for r in table])
                 if len(rows) >= 20:
                     out[c] = rows
                     pending.discard(c)
-        print(f"  {min(k + batch, len(codes))}/{len(codes)} 銘柄（取得できなかった {len(pending)}銘柄）")
-    ws.Cells.Clear()
+        done = min(k + batch, len(codes))
+        el = time.time() - t_all
+        print(f"  {done}/{len(codes)} 銘柄（この回で取れなかった {len(pending)}銘柄）"
+              f" 経過{el / 60:.0f}分 残り約{el / done * (len(codes) - done) / 60:.0f}分")
+        if on_batch:
+            on_batch(out)
+    com_retry(lambda: ws.Cells.Clear())
     return out
 
 
@@ -105,12 +116,22 @@ def summarize_rows(rows: list[tuple[str, float]], year: int | None = None) -> di
 
 
 def write_baseline(path: Path, data: dict):
-    with open(path, "w", encoding="utf-8", newline="") as f:
+    """今回取れた銘柄を書き込む。取れなかった銘柄は、前回の baseline.csv の値を残す。"""
+    keep = {}
+    if path.exists():
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            keep = {r["code"]: r for r in csv.DictReader(f) if r.get("code") and r["code"] not in data}
+    cols = ["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated"]
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated"])
+        w.writerow(cols)
         for c, rows in sorted(data.items()):
             r = summarize_rows(rows)
             w.writerow([c, r["avg_vol"], r["days"], r["ytd_max_vol"], r["ytd_max_date"], date.today().isoformat()])
+        for c, r in sorted(keep.items()):
+            w.writerow([r.get(k, "") for k in cols])
+    tmp.replace(path)
 
 
 def main():
@@ -142,7 +163,8 @@ def main():
         return
 
     codes = [s.code for s in cfg.symbols]
-    codes += [s.code for s in load_universe(cfg.base_dir / cfg.rss.universe_csv, set(codes), cfg.rss.max_scan)]
+    # 平均出来高は universe.csv の全銘柄ぶん取る（max_scan に関係なく）
+    codes += [s.code for s in load_universe(cfg.base_dir / cfg.rss.universe_csv, set(codes), 100_000)]
     if args.check:
         rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
                        else cfg.base_dir / cfg.rss.workbook)
@@ -168,9 +190,9 @@ def main():
         else:
             print("出来高 0日分：取れていません。上の表を送ってください")
         return
-    print(f"{len(codes)}銘柄の日足を取得します…")
-    vols = fetch_daily(cfg, codes)
+    print(f"{len(codes)}銘柄の日足を取得します…（途中で止めても、取れた分は保存されます）")
     out = cfg.data_dir / "baseline.csv"
+    vols = fetch_daily(cfg, codes, on_batch=lambda d: write_baseline(out, d))
     write_baseline(out, vols)
     print(f"保存: {out}（{len(vols)}/{len(codes)}銘柄）")
 
