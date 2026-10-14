@@ -56,6 +56,10 @@ class RuleConfig:
     wall_min_yen: float = 3_000_000  # 金額がこれ未満なら無視（低位株のノイズ除け）
     wall_new_ratio: float = 0.5  # 直前の同じ値段の板がこの割合未満だった＝急に出た
     wall_cooldown_sec: int = 300
+    # R14 ストップ高の剥がれ
+    limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
+    limit_warn_window_min: int = 10
+    limit_warn_cooldown_sec: int = 180
     # 共通
     cooldown_sec: int = 600
     board_cooldown_sec: int = 300
@@ -105,7 +109,7 @@ class Config:
     session_end: str
     record_snapshots: bool
     rules: RuleConfig
-    popup_rules: list = field(default_factory=lambda: ["R13"])
+    popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
 
@@ -167,6 +171,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
         session_end=session.get("end", "15:35"),
         record_snapshots=raw.get("record", {}).get("snapshots", True),
         rules=rules,
-        popup_rules=raw.get("notify", {}).get("popup_rules", ["R13"]),
+        popup_rules=raw.get("notify", {}).get("popup_rules", ["R13", "R14:剥がれ", "R14:警戒"]),
         scanner=scanner,
     )

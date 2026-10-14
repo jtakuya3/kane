@@ -16,6 +16,7 @@ class Engine:
         self.on_bar = on_bar  # 確定足のコールバック（録画用）
         self._day: date | None = None
         self.states: dict[str, SymbolState] = {}
+        self.limits: dict[str, float] = {}  # 銘柄 → ストップ高の値段（kabu /symbol の UpperLimit）
 
     def _reset_if_new_day(self, ts: datetime):
         if self._day != ts.date():
@@ -24,6 +25,7 @@ class Engine:
                 c: SymbolState(info, self.rules.breakout_default_vol5m_ratio)
                 for c, info in self.symbols.items()
             }
+            self.limits = {}
 
     def add_symbol(self, info: SymbolInfo):
         """ランキングから入った銘柄を途中で追加する。"""
@@ -49,6 +51,7 @@ class Engine:
         st = self.states.get(snap.symbol)
         if st is None:
             return []
+        st.upper = self.limits.get(snap.symbol)
         alerts = self._bars(st, st.update(snap))
         for rule in SNAPSHOT_RULES:
             alerts += rule(st, snap, self.rules)

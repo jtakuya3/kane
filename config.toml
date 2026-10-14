@@ -10,7 +10,7 @@ webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"
 
 [notify]
 beep = false   # true にするとWindowsの通知音も鳴らす
-popup_rules = ["R13"]   # 画面にポップアップも出すルール
+popup_rules = ["R13", "R14:剥がれ", "R14:警戒"]   # 画面にポップアップも出す（ルール名 or ルール名:レベル）
 
 [paths]
 symbols_csv = "symbols.csv"

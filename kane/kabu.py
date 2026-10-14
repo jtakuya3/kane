@@ -66,6 +66,9 @@ class KabuClient:
         res = self._req("GET", f"/ranking?Type={type_}&ExchangeDivision={exchange}")
         return res.get("Ranking") or []
 
+    def symbol(self, code: str, exchange: int = 1) -> dict:
+        return self._req("GET", f"/symbol/{code}@{exchange}")
+
     def board(self, code: str, exchange: int = 1) -> dict:
         return self._req("GET", f"/board/{code}@{exchange}")
 

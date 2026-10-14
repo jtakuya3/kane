@@ -25,6 +25,7 @@ class SymbolState:
         self.fired: set = set()
         self.cool_until: dict = {}
         self.vars: dict = {}
+        self.upper: float | None = None  # ストップ高の値段
         if info.breakout_vol5m:
             self.breakout_vol5m = info.breakout_vol5m
         elif info.float_shares:

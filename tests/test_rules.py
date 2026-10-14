@@ -235,3 +235,29 @@ def test_r13_ignores_existing_wall_and_startup_and_small_amount():
 def test_board_roundtrip_encoding():
     from kane.sinks import decode_board, encode_board
     assert decode_board(encode_board([(2000.0, 100.0)], [(2001.5, 300.0)])) == ([(2000.0, 100.0)], [(2001.5, 300.0)])
+
+
+def test_r14_stop_high_lifecycle():
+    e = Engine([SymbolInfo("3909", "ショーケース", None)], RuleConfig())
+
+    def s(sec, price, bid, qty, ask=None, sell_qty=None):
+        return Snapshot(T0 + timedelta(seconds=sec), "3909", price, 0, prev_close=469,
+                        bid=bid, buy1_qty=qty, ask=ask, sell1_qty=sell_qty)
+
+    a = run(e, [
+        s(0, 540, 540, 1000, 541, 500),
+        s(10, 549, 549, 20_000),            # 張り付き（上限 469+80=549）
+        s(20, 549, 549, 18_000),
+        s(30, 549, 549, 9_000, 549, 3_000),  # 買い残がピークの半分以下 → 警戒
+        s(40, 545, 545, 2_000, 546, 800),   # 剥がれ
+        s(50, 549, 549, 5_000),             # 再張り付き
+    ])
+    r14 = rules_of(a, "R14")
+    assert [x.level for x in r14] == ["張り付き", "警戒", "剥がれ", "張り付き"]
+    assert "再張り付き" in r14[3].message
+    assert "上限 549円から-0.73%" in r14[2].message
+
+
+def test_upper_limit_table():
+    from kane.rules import upper_limit
+    assert upper_limit(469) == 549 and upper_limit(1398) == 1698 and upper_limit(99) == 129

@@ -284,6 +284,65 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     return out
 
 
+# 東証の制限値幅（前日終値 → 値幅）。値幅拡大は反映されないので、kabu の UpperLimit を優先する
+_LIMIT_TABLE = [
+    (100, 30), (200, 50), (500, 80), (700, 100), (1000, 150), (1500, 300), (2000, 400),
+    (3000, 500), (5000, 700), (7000, 1000), (10000, 1500), (15000, 3000), (20000, 4000),
+    (30000, 5000), (50000, 7000), (70000, 10000), (100000, 15000), (150000, 30000),
+    (200000, 40000), (300000, 50000), (500000, 70000), (700000, 100000), (1000000, 150000),
+]
+
+
+def upper_limit(prev_close: float) -> float:
+    for bound, width in _LIMIT_TABLE:
+        if prev_close < bound:
+            return prev_close + width
+    return prev_close + 300000
+
+
+def r14_stop_high(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """ストップ高の張り付き・剥がれ警戒・剥がれ・再張り付き。"""
+    up = st.upper or (upper_limit(s.prev_close) if s.prev_close else None)
+    if not up:
+        return []
+    v = st.vars
+    at = bool(s.bid) and s.bid >= up - 1e-9 and (not s.ask or s.ask >= up - 1e-9)
+    qty = s.buy1_qty or 0
+    hist = v.setdefault("lim_hist", deque())
+    up_txt = f"上限 {_yen(up)}円"
+    out = []
+    if at:
+        hist.append((s.ts, qty))
+        while (s.ts - hist[0][0]).total_seconds() > cfg.limit_warn_window_min * 60:
+            hist.popleft()
+        if not v.get("lim_at"):
+            v["lim_at"] = True
+            head = "ストップ高 再張り付き" if v.get("lim_peeled") else "ストップ高 張り付き"
+            out.append(_card(st, s, "R14", "張り付き", [
+                f"{head} {_yen(up)}円  買い残 {qty:,.0f}株（約{up * qty / 1e4:,.0f}万円）"]))
+            return out
+        peak = max(q for _, q in hist)
+        sell_at_up = s.sell1_qty if s.ask and s.ask >= up - 1e-9 else 0
+        reasons = []
+        if peak and qty <= peak * cfg.limit_warn_drop:
+            reasons.append(f"買い残 {peak:,.0f}株→{qty:,.0f}株（{cfg.limit_warn_window_min}分内ピーク比{qty / peak:.0%}）")
+        if sell_at_up and sell_at_up >= qty:
+            reasons.append(f"上限値の売り板 {sell_at_up:,.0f}株 ≧ 買い残 {qty:,.0f}株")
+        if reasons and st.cooled("R14warn", s.ts, cfg.limit_warn_cooldown_sec):
+            out.append(_card(st, s, "R14", "警戒", ["ストップ高 剥がれ警戒", *reasons]))
+        v["lim_last_qty"] = qty
+        return out
+    if v.get("lim_at"):  # 張り付き → 剥がれ
+        v["lim_at"], v["lim_peeled"] = False, True
+        hist.clear()
+        last = v.get("lim_last_qty", 0)
+        out.append(_card(st, s, "R14", "剥がれ", [
+            f"ストップ高 剥がれ 現在値 {_yen(s.price)}円（{up_txt}から{s.price / up - 1:+.2%}）",
+            f"買い気配 {_yen(s.bid) if s.bid else '-'}円  直前の買い残 {last:,.0f}株",
+        ]))
+    return out
+
+
 # ---------------- 1分足確定系 ----------------
 
 def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
@@ -362,6 +421,6 @@ def r8_arm(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
 
 
 SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout, r10_price_step,
-                  r11_surge, r12_special_quote, r13_big_board]
+                  r11_surge, r12_special_quote, r13_big_board, r14_stop_high]
 BAR_RULES = [r3_stall, r6_rsi, r7_rebound, r8_arm]
 LIGHT_RULES = [r10_price_step, r11_surge]

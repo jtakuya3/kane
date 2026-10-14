@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import sys
+import time as _time
 from datetime import datetime, time, timedelta
 
 import websockets
@@ -83,11 +84,25 @@ class Monitor:
     def push_codes(self) -> list[str]:
         return self.scanner.push_codes() if self.scanner else [x.code for x in self.cfg.symbols]
 
+    def load_limits(self, codes):
+        """値幅制限の上限を /symbol から取る（取れなければ前日終値から計算）。"""
+        for c in codes:
+            if c in self.engine.limits:
+                continue
+            try:
+                info = self.client.symbol(c)
+                if info.get("UpperLimit"):
+                    self.engine.limits[c] = float(info["UpperLimit"])
+            except KabuError as e:
+                log.warning("値幅制限の取得失敗 %s: %s", c, e)
+            _time.sleep(0.12)
+
     async def emit(self, alerts):
         for a in alerts:
             self.count += 1
             self.recorder.alert(a)
-            await asyncio.to_thread(self.notifier.send, a.message, a.rule in self.cfg.popup_rules)
+            pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
+            await asyncio.to_thread(self.notifier.send, a.message, pop)
 
     async def wait_session(self):
         while True:
@@ -115,6 +130,7 @@ class Monitor:
                 await asyncio.to_thread(self.client.get_token)
                 codes = self.push_codes()
                 await asyncio.to_thread(self.client.register, codes)
+                await asyncio.to_thread(self.load_limits, codes)
                 log.info("PUSH登録 %d銘柄", len(codes))
                 async with websockets.connect(self.cfg.ws_url, max_size=None, ping_interval=None) as ws:
                     backoff = 2
@@ -148,6 +164,7 @@ class Monitor:
                     await asyncio.to_thread(self.client.unregister, remove)
                 if add:
                     await asyncio.to_thread(self.client.register_add, add)
+                    await asyncio.to_thread(self.load_limits, add)
                 if add or remove:
                     log.info("PUSH入替 +%s -%s（ランキング枠 %d/%d）", add, remove, len(sc.active), sc.slots)
                 if self.cfg.scanner.light_alerts:
