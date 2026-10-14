@@ -63,3 +63,15 @@ PUSH登録は起動時に `unregister/all` してから行う（上限50銘柄�
 python -m kane.replay C:/Users/takuy/Desktop/08_開発案件/kane_data/snapshots_20261015.csv
 python -m pytest
 ```
+
+## 答え合わせ（判定の当たり率）
+- 毎日のライブ記録：`python -m kane.evaluate --date 20261015`（`--all` で全日を合算）。
+  各通知の1・5・15・30分後のリターンと15分以内の伸び／逆行を測り、ルールごとの当たり率を出す。
+- 過去データ（バックテスト）：`py -3.11 -m pip install -r requirements-backtest.txt` の後
+  ```
+  python -m kane.backtest --inspect "C:/Users/takuy/Downloads/_backtest_data/min1_xxx.parquet"   # 列の確認
+  python -m kane.backtest "C:/Users/takuy/Downloads/_backtest_data/min1*.parquet"                # 実行
+  ```
+  前日比±5%以上動いた銘柄日を対象に、ライブと同じエンジンで判定し、
+  `data_dir/backtest_日時/` に eval.csv・evalsum.csv・turnover_study.csv（高値・安値が当日出来高の何%時点か）を保存する。
+  元データは読むだけで書き換えない。板のデータは無いので R13・R14 は評価できない。
