@@ -88,4 +88,8 @@ def parse_push(msg: dict, ts: datetime | None = None) -> Snapshot | None:
         sell5=_qty_sum(msg, "Sell"),
         bid=buy1.get("Price") or None,
         ask=sell1.get("Price") or None,
+        buy1_qty=buy1.get("Qty") or None,
+        sell1_qty=sell1.get("Qty") or None,
+        buy1_sign=buy1.get("Sign") or None,
+        sell1_sign=sell1.get("Sign") or None,
     )

@@ -149,3 +149,50 @@ def test_recorder_and_replay_roundtrip(tmp_path):
                  [SymbolInfo("TEST", "テスト", 1_000_000, None)], "08:55", "15:35", True, RuleConfig())
     alerts = replay(cfg, tmp_path / "snapshots_20261015.csv")
     assert [a.level for a in alerts if a.rule == "R1"] == ["50%", "80%"]
+
+
+def test_r10_price_step_and_ytd_high():
+    e = Engine([SymbolInfo("4382", "ＨＥＲＯＺ", None, issued_shares=17_780_000, ytd_high=1460)], RuleConfig())
+
+    def s(sec, price):
+        return Snapshot(T0 + timedelta(seconds=sec), "4382", price, 0, prev_close=1398)
+
+    a = run(e, [s(0, 1420), s(1, 1455), s(2, 1468), s(3, 1470), s(4, 1540), s(5, 1300)])
+    r10 = rules_of(a, "R10")
+    assert [x.level for x in r10] == ["5%段階", "10%段階", "−5%段階"]
+    assert r10[0].message.splitlines()[1:4] == [
+        "4382ＨＥＲＯＺ時価総額 261億円",
+        "年初来高値更新株価 1468円 前日比 +70円（+5.01%）",
+        "直前基準 1398円比 +5.01%  5%段階",
+    ]
+
+
+def test_r11_surge_1m():
+    e = Engine([SymbolInfo("3907", "シリコンスタジオ", None, issued_shares=2_956_500)], RuleConfig())
+
+    def s(sec, price, vwap):
+        return Snapshot(T0.replace(hour=9, minute=59) + timedelta(seconds=sec), "3907", price, 0,
+                        vwap=vwap, prev_close=1570)
+
+    a = run(e, [s(0, 1680, 1640), s(30, 1700, 1645), s(62, 1725, 1646.4), s(70, 1730, 1647)])
+    r11 = rules_of(a, "R11")
+    assert len(r11) == 1
+    assert r11[0].message.splitlines()[2:4] == ["急騰株価 1725円（+9.87%）", "VWAP比 +4.77%  1分前比 +2.68%"]
+
+
+def test_r12_special_buy_quote():
+    e = Engine([SymbolInfo("3909", "ショーケース", None, issued_shares=10_185_600)], RuleConfig())
+
+    def s(sec, sign):
+        return Snapshot(T0.replace(minute=3) + timedelta(seconds=sec), "3909", 549, 0, vwap=530.85,
+                        prev_close=469, bid=549, buy1_qty=14_300, buy1_sign=sign)
+
+    a = run(e, [s(3, "0102"), s(4, "0102"), s(5, "0101"), s(6, "0102")])
+    r12 = rules_of(a, "R12")
+    assert len(r12) == 2
+    assert r12[0].message.splitlines() == [
+        "09:03:03",
+        "3909ショーケース時価総額 56億円",
+        "特別買い気配（S）買い気配 549円 14,300株（約785万円）",
+        "直近約定 549円（+17.06%）  直近約定比 +0.00%  VWAP比 +3.42%",
+    ]

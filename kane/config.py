@@ -45,6 +45,12 @@ class RuleConfig:
     # R9 高値ブレイク
     breakout_quiet_bars: int = 10
     breakout_default_vol5m_ratio: float = 0.07  # 浮動株に対する5分出来高の既定割合
+    # R10 株価の段階（前日終値比）＋年初来高値更新
+    price_step: float = 0.05
+    price_step_down: bool = True  # 下落側（−5%, −10%…）も出す
+    # R11 急騰・急落（1分前比）
+    surge_1m: float = 0.02
+    surge_cooldown_sec: int = 180
     # 共通
     cooldown_sec: int = 600
     board_cooldown_sec: int = 300
@@ -55,7 +61,9 @@ class SymbolInfo:
     code: str
     name: str
     float_shares: float | None
-    breakout_vol5m: float | None
+    breakout_vol5m: float | None = None
+    issued_shares: float | None = None  # 時価総額の表示用
+    ytd_high: float | None = None  # 前日までの年初来高値
 
 
 @dataclass
@@ -92,6 +100,8 @@ def load_symbols(path: Path) -> list[SymbolInfo]:
                     name=(row.get("name") or "").strip(),
                     float_shares=num("float_shares"),
                     breakout_vol5m=num("breakout_vol5m"),
+                    issued_shares=num("issued_shares"),
+                    ytd_high=num("ytd_high"),
                 )
             )
     return out

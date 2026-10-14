@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from collections import deque
 from datetime import datetime
 
 from .config import RuleConfig
@@ -126,6 +127,120 @@ def r9_breakout(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
                    f"高値{_fmt(prior_high)}を出来高を伴って上抜け（5分出来高{_fmt(v5)}≧{_fmt(st.breakout_vol5m)}）")]
 
 
+def _yen(x: float) -> str:
+    """株価表示（カンマなし、0.1円刻みの銘柄は小数も表示）。"""
+    return f"{x:.0f}" if float(x).is_integer() else f"{x:.1f}"
+
+
+def _card(st: SymbolState, s: Snapshot, rule: str, level: str, body: list[str], **extras) -> Alert:
+    """時刻・銘柄・時価総額の見出し付きの複数行通知。"""
+    i = st.info
+    cap = f"時価総額 {s.price * i.issued_shares / 1e8:,.0f}億円" if i.issued_shares else ""
+    lines = [f"{s.ts:%H:%M:%S}", f"{i.code}{i.name}{cap}", *body]
+    tail = []
+    if st.turnover is not None:
+        tail.append(f"回転率{st.turnover:.0%}")
+    if rule == "R10" and st.vwap_dev is not None:
+        tail.append(f"VWAP乖離{st.vwap_dev:+.1%}")
+    if tail:
+        lines.append(" ".join(tail))
+    return Alert(s.ts, i.code, rule, level, "\n".join(lines), s.price,
+                 {"turnover": st.turnover, "vwap_dev": st.vwap_dev, **extras})
+
+
+def _pct_prev(s: Snapshot) -> str:
+    return f"（{s.price / s.prev_close - 1:+.2%}）" if s.prev_close else ""
+
+
+def _vwap_txt(st: SymbolState) -> str:
+    return f"VWAP比 {st.vwap_dev:+.2%}" if st.vwap_dev is not None else ""
+
+
+def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """前日終値比が5%刻みの段階を初めて超えたとき、または年初来高値を初めて更新したとき。"""
+    pc = s.prev_close
+    if not pc:
+        return []
+    chg = s.price / pc - 1
+    n = int(chg / cfg.price_step)  # 0方向に切り捨て（+7%→1、−7%→−1）
+    step_up = n > st.vars.get("step_max", 0)
+    step_down = cfg.price_step_down and n < st.vars.get("step_min", 0)
+    if step_up:
+        st.vars["step_max"] = n
+    if step_down:
+        st.vars["step_min"] = n
+
+    ytd = st.info.ytd_high
+    ytd_break = bool(ytd) and s.price > ytd
+    first_ytd = ytd_break and st.once("R10ytd")
+    if not (step_up or step_down or first_ytd):
+        return []
+
+    day_high = st.day_high
+    if ytd_break:
+        head = "年初来高値更新"
+    elif day_high and s.price >= day_high:
+        head = "当日高値更新"
+    else:
+        head = ""
+    step = f"{abs(n) * cfg.price_step:.0%}段階" if n > 0 else f"−{abs(n) * cfg.price_step:.0%}段階" if n < 0 else ""
+    body = [
+        f"{head}株価 {_yen(s.price)}円 前日比 {s.price - pc:+.0f}円（{chg:+.2%}）",
+        f"直前基準 {_yen(pc)}円比 {chg:+.2%}  {step}".rstrip(),
+    ]
+    return [_card(st, s, "R10", step or "年初来高値", body, change=chg)]
+
+
+def r11_surge(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """1分前の株価から±surge_1m以上動いたら急騰／急落。"""
+    hist = st.vars.setdefault("px_hist", deque())
+    hist.append((s.ts, s.price))
+    while len(hist) > 1 and (s.ts - hist[1][0]).total_seconds() >= 60:
+        hist.popleft()
+    t0, p0 = hist[0]
+    if (s.ts - t0).total_seconds() < 60 * 0.9 or not p0:
+        return []  # 1分前のデータがまだ無い
+    m = s.price / p0 - 1
+    if abs(m) < cfg.surge_1m:
+        return []
+    side = "急騰" if m > 0 else "急落"
+    if not st.cooled(("R11", side), s.ts, cfg.surge_cooldown_sec):
+        return []
+    body = [
+        f"{side}株価 {_yen(s.price)}円{_pct_prev(s)}",
+        f"{_vwap_txt(st)}  1分前比 {m:+.2%}".strip(),
+    ]
+    return [_card(st, s, "R11", side, body, change_1m=m)]
+
+
+SPECIAL_SIGN = "0102"  # kabuステーションAPIの気配フラグ：特別気配
+
+
+def r12_special_quote(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """特別買い気配・特別売り気配（S）に入ったとき。気配が解消したら再通知可能。"""
+    out = []
+    for side, sign, px, qty, name in (
+        ("buy", s.buy1_sign, s.bid, s.buy1_qty, "特別買い気配（S）買い気配"),
+        ("sell", s.sell1_sign, s.ask, s.sell1_qty, "特別売り気配（S）売り気配"),
+    ):
+        key = ("R12", side)
+        on = sign == SPECIAL_SIGN and bool(px)
+        if not on:
+            st.fired.discard(key)
+            continue
+        if not st.once(key):
+            continue
+        amount = f"（約{px * qty / 1e4:,.0f}万円）" if qty else ""
+        qty_txt = f" {qty:,.0f}株{amount}" if qty else ""
+        diff = f"直近約定比 {px / s.price - 1:+.2%}"
+        body = [
+            f"{name} {_yen(px)}円{qty_txt}",
+            f"直近約定 {_yen(s.price)}円{_pct_prev(s)}  {diff}  {_vwap_txt(st)}".rstrip(),
+        ]
+        out.append(_card(st, s, "R12", side, body))
+    return out
+
+
 # ---------------- 1分足確定系 ----------------
 
 def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
@@ -203,5 +318,6 @@ def r8_arm(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
     return []
 
 
-SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout]
+SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout, r10_price_step,
+                  r11_surge, r12_special_quote]
 BAR_RULES = [r3_stall, r6_rsi, r7_rebound, r8_arm]

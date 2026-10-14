@@ -13,7 +13,8 @@ from .models import Alert, Bar, Snapshot
 log = logging.getLogger("kane")
 
 SNAP_COLS = ["ts", "symbol", "price", "volume", "vwap", "high", "low", "open",
-             "prev_close", "buy5", "sell5", "bid", "ask"]
+             "prev_close", "buy5", "sell5", "bid", "ask",
+             "buy1_qty", "sell1_qty", "buy1_sign", "sell1_sign"]
 BAR_COLS = ["start", "symbol", "open", "high", "low", "close", "volume", "turnover", "vwap"]
 ALERT_COLS = ["ts", "symbol", "rule", "level", "price", "turnover", "vwap_dev", "message"]
 
@@ -109,6 +110,9 @@ def read_snapshots(path: Path):
     def f(v):
         return float(v) if v not in ("", None) else None
 
+    def t(v):
+        return v or None
+
     with open(path, encoding="utf-8", newline="") as fh:
         for r in csv.DictReader(fh):
             yield Snapshot(
@@ -116,4 +120,6 @@ def read_snapshots(path: Path):
                 volume=float(r["volume"]), vwap=f(r["vwap"]), high=f(r["high"]), low=f(r["low"]),
                 open=f(r["open"]), prev_close=f(r["prev_close"]), buy5=f(r["buy5"]),
                 sell5=f(r["sell5"]), bid=f(r["bid"]), ask=f(r["ask"]),
+                buy1_qty=f(r.get("buy1_qty")), sell1_qty=f(r.get("sell1_qty")),
+                buy1_sign=t(r.get("buy1_sign")), sell1_sign=t(r.get("sell1_sign")),
             )

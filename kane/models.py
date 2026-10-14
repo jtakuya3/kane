@@ -22,6 +22,10 @@ class Snapshot:
     sell5: float | None = None  # 売り気配 上位5本の数量合計
     bid: float | None = None  # 最良買い気配
     ask: float | None = None  # 最良売り気配
+    buy1_qty: float | None = None
+    sell1_qty: float | None = None
+    buy1_sign: str | None = None  # 気配フラグ（"0102"=特別気配）
+    sell1_sign: str | None = None
 
 
 @dataclass
