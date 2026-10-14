@@ -44,7 +44,16 @@ def setup_logging(cfg: Config):
 
 def check(cfg: Config):
     client = KabuClient(cfg.base_url, cfg.password_file)
-    client.get_token()
+    try:
+        client.get_token()
+    except KabuError as e:
+        print(f"NG: {e}")
+        print("確認すること：")
+        print("  1) kabuステーションが起動してログイン済みか")
+        print("  2) kabuステーションの「システム設定 → API」で API を「利用する」にしているか（変更後はkabuステーションを再起動）")
+        print(f"  3) 接続先 {cfg.base_url} のポートが合っているか（本番18080 / 検証18081）")
+        print("  4) APIパスワードのファイル:", cfg.password_file)
+        return
     print("トークン取得 OK")
     codes = [s.code for s in cfg.symbols]
     print("PUSH登録:", client.register(codes))
