@@ -10,7 +10,7 @@ ws_url = "ws://localhost:18080/kabusapi/websocket"
 password_file = "C:/Users/takuy/Downloads/kabu_api_word.txt"
 
 [slack]
-enabled = true
+enabled = false   # Slackには送らない（画面のアラート窓のみ）。送る場合は true
 webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"
 
 [notify]
