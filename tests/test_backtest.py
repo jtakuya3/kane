@@ -102,3 +102,21 @@ def test_study_summary_text(tmp_path):
     txt = summarize_study([{"high_vol_share": 0.4, "low_vol_share": 0.9, "high_time": "09:10",
                             "high_float_turnover": None, "low_float_turnover": None}])
     assert "中央値 40%" in txt and "寄り天型" in txt
+
+
+def test_rvol_buckets_and_compute():
+    from kane.backtest import compute_rvol, group_label, rvol_bucket
+
+    rows = []
+    days = pd.bdate_range("2026-01-05", periods=25)
+    for i, d in enumerate(days):
+        for k in range(3):
+            v = 1000 if i < 24 else 10_000  # 最終日だけ10倍
+            rows.append(("4498", d + pd.Timedelta(hours=9, minutes=5 * k), 100, 100, 100, 100, v))
+    bars = pd.DataFrame(rows, columns=["code", "dt", "open", "high", "low", "close", "volume"])
+    last = days[-1].date()
+    rv = compute_rvol(bars, {("4498", last)})
+    t = (days[-1] + pd.Timedelta(hours=9, minutes=10)).to_pydatetime()
+    assert round(rv[("4498", t)], 1) == 10.0
+    assert rvol_bucket(10.0) == "10〜20倍" and rvol_bucket(None).startswith("不明")
+    assert group_label("R10", "30%段階") == "+25%以上の段階" and group_label("R10", "−20%段階") == "−15%以下の段階"

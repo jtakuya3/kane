@@ -260,6 +260,99 @@ def summarize_study(study: list[dict]) -> str:
     return "\n".join(out)
 
 
+# ---------------- 時間帯をそろえた相対出来高（RVOL） ----------------
+
+RVOL_BUCKETS = [(0, 1, "1倍未満"), (1, 2, "1〜2倍"), (2, 3, "2〜3倍"), (3, 5, "3〜5倍"),
+                (5, 10, "5〜10倍"), (10, 20, "10〜20倍"), (20, float("inf"), "20倍以上")]
+
+
+def rvol_bucket(v) -> str:
+    if v is None or v != v:
+        return "不明（過去データ不足）"
+    for lo, hi, name in RVOL_BUCKETS:
+        if lo <= v < hi:
+            return name
+    return "不明（過去データ不足）"
+
+
+def compute_rvol(bars, keys: set, window: int = 60, min_periods: int = 20) -> dict:
+    """銘柄×日×時刻ごとの RVOL＝その時刻までの累計出来高 ÷ 過去window営業日の同じ時刻までの累計出来高の平均。
+    戻り値は {(銘柄, 足の開始時刻): RVOL}（keys に含まれる銘柄日だけ）。"""
+    b = bars[["code", "dt", "volume"]].copy()
+    b["day"] = b["dt"].dt.normalize()
+    b["slot"] = b["dt"] - b["day"]
+    piv = b.pivot_table(index=["code", "day"], columns="slot", values="volume",
+                        aggfunc="sum", fill_value=0).astype("float32")
+    cum = piv.cumsum(axis=1)
+    base = cum.groupby(level="code", group_keys=False).apply(
+        lambda g: g.rolling(window, min_periods=min_periods).mean().shift(1))
+    rv = (cum / base.where(base > 0))
+    import pandas as pd
+
+    idx = pd.MultiIndex.from_tuples([(c, pd.Timestamp(d)) for c, d in keys], names=["code", "day"])
+    rv = rv.reindex(idx.intersection(rv.index))
+    out = {}
+    for (code, day), row in rv.iterrows():
+        for slot, v in row.items():
+            if v == v:
+                out[(code, (day + slot).to_pydatetime())] = float(v)
+    return out
+
+
+def group_label(rule: str, level: str) -> str:
+    """RVOL別の集計で、R10の段階はまとめて見る。"""
+    if rule == "R10" and level.endswith("段階"):
+        try:
+            n = int(level.replace("−", "-").rstrip("段階").rstrip("%"))
+        except ValueError:
+            return level
+        if n >= 25:
+            return "+25%以上の段階"
+        if n >= 10:
+            return "+10〜20%の段階"
+        if n <= -15:
+            return "−15%以下の段階"
+        return "±5〜10%の段階"
+    return level
+
+
+def rvol_table(rows: list[dict], min_n: int = 30) -> tuple[str, list[dict]]:
+    from collections import defaultdict
+
+    from .evaluate import OUTLIER
+
+    groups = defaultdict(list)
+    for r in rows:
+        groups[(r["rule"], group_label(r["rule"], r["level"]), r["rvol_bucket"])].append(r)
+    order = [name for _, _, name in RVOL_BUCKETS] + ["不明（過去データ不足）"]
+    recs = []
+    for (rule, label, bucket), rs in groups.items():
+        d = rs[0]["dir"] or 1
+        vals = [r["ret30"] * d for r in rs if r["ret30"] is not None and abs(r["ret30"]) <= OUTLIER]
+        v15 = [r["ret15"] * d for r in rs if r["ret15"] is not None and abs(r["ret15"]) <= OUTLIER]
+        recs.append({
+            "rule": rule, "level": label, "rvol": bucket, "n": len(rs),
+            "hit30": (sum(1 for v in vals if v > 0) / len(vals)) if vals and rs[0]["dir"] else None,
+            "avg15": sum(v15) / len(v15) if v15 else None,
+            "avg30": sum(vals) / len(vals) if vals else None,
+            "med30": sorted(vals)[len(vals) // 2] if vals else None,
+        })
+    recs.sort(key=lambda x: (x["rule"], x["level"], order.index(x["rvol"])))
+
+    def pct(v, signed=True):
+        return "-" if v is None else (f"{v:+.2%}" if signed else f"{v:.0%}")
+
+    lines = ["RVOL（その時刻までの出来高が、過去60日の同じ時刻の平均の何倍か）別の成績",
+             "ルール 種類              RVOL                件数  当たり30分 平均15分 平均30分 中央30分"]
+    for r in recs:
+        if r["n"] < min_n:
+            continue
+        lines.append(f"{r['rule']:<5} {r['level']:<16} {r['rvol']:<18} {r['n']:>6}  "
+                     f"{pct(r['hit30'], False):>9} {pct(r['avg15']):>8} {pct(r['avg30']):>8} {pct(r['med30']):>8}")
+    lines.append(f"※件数{min_n}件未満の行は省略。平均・中央値は期待方向に動いたらプラス（R10は上がればプラス）。")
+    return "\n".join(lines), recs
+
+
 def inspect(path: str):
     if path.lower().endswith(".7z"):
         try:
@@ -308,6 +401,15 @@ def main():
     out = cfg.data_dir / f"backtest_{datetime.now():%Y%m%d_%H%M}"
     out.mkdir(parents=True, exist_ok=True)
     rows = evaluate(alerts, book)
+    print("RVOL（相対出来高）を計算中…")
+    keys = set(zip(used["code"], used["day"]))
+    rv = compute_rvol(bars, keys)
+    step = bar_minutes(bars)
+    for r, a in zip(rows, alerts):
+        t = a.ts.replace(second=0, microsecond=0)
+        t = t.replace(minute=t.minute - t.minute % step)
+        r["rvol"] = rv.get((a.symbol, t))
+        r["rvol_bucket"] = rvol_bucket(r["rvol"])
     summary = summarize(rows)
     write_csv(out / "eval.csv", rows)
     write_csv(out / "evalsum.csv", summary)
@@ -316,6 +418,9 @@ def main():
     print(f"\n通知 {len(rows):,}件\n")
     print(format_summary(summary))
     print("\n" + summarize_study(study))
+    text, recs = rvol_table(rows)
+    write_csv(out / "evalsum_rvol.csv", recs)
+    print("\n" + text)
     print(f"\n保存先: {out}")
 
 
