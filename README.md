@@ -34,7 +34,21 @@ R10〜R14 は時刻・銘柄・時価総額の見出し付きの複数行で通�
 閾値は `config.toml` の `[rules]` で上書きできる（項目名は `kane/config.py` の `RuleConfig`）。
 浮動株と R9 の5分出来高閾値は `symbols.csv`（`breakout_vol5m` が空なら浮動株の7%）。
 
-## 監視銘柄（固定＋ランキング）
+## 取り込み元
+`config.toml` の `[source] type` で切り替える。
+
+- `"rss"`（現在の既定）：楽天 マーケットスピードII RSS。kane が起動中の Excel にシート
+  `kane_watch`（固定銘柄・板10本）と `kane_scan`（universe.csv の銘柄・最良気配のみ）を作って
+  `RssMarket` 関数を書き込み、1秒ごとに値を読む。スキャン銘柄は `[rss] scan_rules` のルールだけ、
+  売買代金が `scan_min_value_yen` 以上のときに通知する。
+- `"kabu"`：kabuステーションAPI（PUSH配信＋ランキングで50枠を入れ替え）。Professionalプラン以上が必要。
+
+スキャン用の銘柄一覧は JPX の上場銘柄一覧（data_j.xls）から作る：
+```
+python -m kane.universe C:/Users/takuy/Downloads/data_j.xls --market グロース --market スタンダード
+```
+
+## 監視銘柄（kabu：固定＋ランキング）
 - `symbols.csv` の銘柄は**固定**で常にPUSH登録する。`group` 列（security / ipo など）は開始通知の表示用。
 - 残りの枠（50 − 固定数）は、kabuのランキングAPI（値上がり率・売買高急増・売買代金急増・TICK回数など、
   `[scanner] rankings`）を10秒ごとに巡回して、順位を点数化した上位で自動的に埋める。

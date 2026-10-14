@@ -1,4 +1,9 @@
-# kane 監視設定。パスは既存の点火監視システムと同じファイルを流用（中身はリポジトリに入れない）
+# kane 監視設定。
+# データの取り込み元： "rss"（楽天 マーケットスピードII RSS / Excel） または "kabu"（kabuステーションAPI）
+[source]
+type = "rss"
+
+# パスは既存の点火監視システムと同じファイルを流用（中身はリポジトリに入れない）
 [kabu]
 base_url = "http://localhost:18080/kabusapi"
 ws_url = "ws://localhost:18080/kabusapi/websocket"
@@ -43,3 +48,31 @@ light_alerts = true
 # [種類, 市場]  種類 1値上がり率 2値下がり率 3売買高 4売買代金 5TICK回数 6売買高急増 7売買代金急増
 #               市場 ALL 全市場 / TP プライム / TS スタンダード / TG グロース
 rankings = [[1, "ALL"], [6, "ALL"], [7, "ALL"], [5, "ALL"], [1, "TG"], [1, "TS"], [2, "ALL"]]
+
+# ---- 楽天RSS（source.type = "rss" のとき） ----
+[rss]
+workbook = "C:/Users/takuy/Desktop/08_開発案件/kane_data/kane_rss.xlsx"   # kane が式を書き込むブック（無ければ作る）
+poll_sec = 1.0
+code_suffix = ".T"
+board_levels = 10          # 固定銘柄の板の本数（重ければ 5 や 0 に）
+universe_csv = "universe.csv"   # スキャン用の銘柄一覧（python -m kane.universe で作る）
+max_scan = 600
+scan_rules = ["R10", "R11", "R12", "R14"]   # スキャン銘柄で通知するルール
+scan_min_value_yen = 100000000              # スキャン銘柄は売買代金1億円以上だけ通知
+
+# RssMarket の項目名。check.bat でエラーが出た項目は、公式の関数一覧の表記に書き換える
+[rss.items]
+price = "現在値"
+volume = "出来高"
+vwap = "VWAP"
+open = "始値"
+high = "高値"
+low = "安値"
+prev_close = "前日終値"
+ytd_high = "年初来高値"
+bid_price = "最良買気配値{i}"
+bid_qty = "最良買気配数量{i}"
+ask_price = "最良売気配値{i}"
+ask_qty = "最良売気配数量{i}"
+bid_sign = ""   # 特別気配が分かる項目名（分かったら入れる）
+ask_sign = ""

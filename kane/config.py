@@ -85,6 +85,30 @@ class ScannerConfig:
 
 
 @dataclass
+class RssConfig:
+    """楽天 マーケットスピードII RSS（Excel）から読む場合の設定。"""
+    workbook: str = "kane_rss.xlsx"
+    poll_sec: float = 1.0
+    function: str = "RssMarket"
+    code_suffix: str = ".T"  # RssMarket に渡す銘柄コードの末尾（東証）
+    board_levels: int = 10  # 固定監視銘柄で読む板の本数（0なら板を読まない）
+    universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
+    max_scan: int = 600
+    # スキャン銘柄で通知するルール（固定銘柄は全ルール）
+    scan_rules: list = field(default_factory=lambda: ["R10", "R11", "R12", "R14"])
+    scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
+    # RssMarket の項目名（公式の関数一覧・数式登録エディタの表記に合わせて変更できる）
+    items: dict = field(default_factory=lambda: {
+        "price": "現在値", "volume": "出来高", "vwap": "VWAP", "open": "始値", "high": "高値",
+        "low": "安値", "prev_close": "前日終値", "ytd_high": "年初来高値", "name": "銘柄名称",
+        "bid_price": "最良買気配値{i}", "bid_qty": "最良買気配数量{i}",
+        "ask_price": "最良売気配値{i}", "ask_qty": "最良売気配数量{i}",
+        "bid_sign": "", "ask_sign": "",  # 気配の状態（特別気配）の項目名。空なら R12 は判定しない
+    })
+    special_values: list = field(default_factory=lambda: ["特", "S", "特別気配"])
+
+
+@dataclass
 class SymbolInfo:
     code: str
     name: str
@@ -111,6 +135,9 @@ class Config:
     rules: RuleConfig
     popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
+    source: str = "kabu"  # "kabu" または "rss"
+    rss: RssConfig = field(default_factory=RssConfig)
+    base_dir: Path = Path(".")
 
 
 def load_symbols(path: Path) -> list[SymbolInfo]:
@@ -161,7 +188,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     return Config(
         base_url=kabu.get("base_url", "http://localhost:18080/kabusapi"),
         ws_url=kabu.get("ws_url", "ws://localhost:18080/kabusapi/websocket"),
-        password_file=p(kabu["password_file"]),
+        password_file=p(kabu["password_file"]) if kabu.get("password_file") else None,
         slack_webhook_file=p(slack["webhook_file"]) if slack.get("webhook_file") else None,
         slack_enabled=slack.get("enabled", True),
         beep=raw.get("notify", {}).get("beep", False),
@@ -173,4 +200,14 @@ def load_config(path: str | Path = "config.toml") -> Config:
         rules=rules,
         popup_rules=raw.get("notify", {}).get("popup_rules", ["R13", "R14:剥がれ", "R14:警戒"]),
         scanner=scanner,
+        source=raw.get("source", {}).get("type", "kabu"),
+        rss=_rss_config(raw.get("rss", {})),
+        base_dir=base,
     )
+
+
+def _rss_config(d: dict) -> RssConfig:
+    rk = {f.name for f in fields(RssConfig)}
+    cfg = RssConfig(**{k: v for k, v in d.items() if k in rk and k != "items"})
+    cfg.items.update(d.get("items", {}))
+    return cfg

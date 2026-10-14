@@ -223,6 +223,18 @@ def main():
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
     cfg = load_config(args.config)
+    if cfg.source == "rss":
+        from .rss_monitor import RssMonitor
+
+        if args.check:
+            RssMonitor(cfg).check()
+            return
+        setup_logging(cfg)
+        try:
+            RssMonitor(cfg).run()
+        except KeyboardInterrupt:
+            pass
+        return
     if args.check:
         check(cfg)
         return
