@@ -118,5 +118,22 @@ def test_rvol_buckets_and_compute():
     rv = compute_rvol(bars, {("4498", last)})
     t = (days[-1] + pd.Timedelta(hours=9, minutes=10)).to_pydatetime()
     assert round(rv[("4498", t)], 1) == 10.0
-    assert rvol_bucket(10.0) == "10〜20倍" and rvol_bucket(None).startswith("不明")
+    assert rvol_bucket(10.0) == "10〜20倍" and rvol_bucket(60) == "50倍以上" and rvol_bucket(None).startswith("不明")
     assert group_label("R10", "30%段階") == "+25%以上の段階" and group_label("R10", "−20%段階") == "−15%以下の段階"
+
+
+def test_period_table_and_daily_rvol(tmp_path):
+    from kane.backtest import daily_rvol, period_table
+    from kane.evaluate import AlertRow
+
+    t1, t2 = datetime(2026, 1, 10, 10, 0), datetime(2026, 5, 10, 10, 0)
+    alerts = [AlertRow(t1, "X", "R10", "年初来高値", 100.0), AlertRow(t2, "X", "R10", "年初来高値", 100.0)]
+    rows = [{"rule": "R10", "level": "年初来高値", "dir": 0, "ret30": 0.01, "rvol": 3.0},
+            {"rule": "R10", "level": "年初来高値", "dir": 0, "ret30": -0.01, "rvol": 3.0}]
+    text, recs = period_table(rows, alerts)
+    assert "12〜2月" in text and "5〜6月" in text
+    assert any(r["period"] == "12〜2月" and r["n"] == 1 and r["avg30"] == 0.01 for r in recs)
+    days = pd.bdate_range("2026-01-05", periods=22)
+    bars = pd.DataFrame({"code": ["X"] * 22, "dt": days, "volume": [100.0] * 21 + [1000.0]})
+    drv = daily_rvol(bars)
+    assert round(drv[("X", days[-1].date())], 1) == 10.0

@@ -219,8 +219,17 @@ def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_chang
     return alerts, book, b
 
 
-def turnover_study(b, known: dict[str, SymbolInfo]) -> list[dict]:
+def daily_rvol(bars) -> dict:
+    """{(銘柄, 日): 当日出来高 ÷ 過去60営業日の平均日出来高}（過去20日未満は無し）。"""
+    d = bars.assign(day=bars["dt"].dt.date).groupby(["code", "day"])["volume"].sum().reset_index()
+    d = d.sort_values(["code", "day"])
+    d["base"] = d.groupby("code")["volume"].transform(lambda s: s.rolling(60, min_periods=20).mean().shift(1))
+    return {(c, dy): (v / bs if bs and bs == bs else None) for c, dy, v, bs in zip(d["code"], d["day"], d["volume"], d["base"])}
+
+
+def turnover_study(b, known: dict[str, SymbolInfo], drv: dict | None = None) -> list[dict]:
     """「高値・安値は当日出来高の何%時点で付いたか」（浮動株があれば浮動株回転率も）。"""
+    drv = drv or {}
     out = []
     for (code, day), g in b.groupby(["code", "day"], sort=False):
         g = g.sort_values("dt")
@@ -236,6 +245,8 @@ def turnover_study(b, known: dict[str, SymbolInfo]) -> list[dict]:
             "low_time": g.loc[il, "dt"].strftime("%H:%M"), "low_vol_share": cum.loc[il] / total,
             "high_float_turnover": (cum.loc[ih] / fl) if fl else None,
             "low_float_turnover": (cum.loc[il] / fl) if fl else None,
+            "day_float_turnover": (total / fl) if fl else None,
+            "day_rvol": drv.get((code, day)),
         })
     return out
 
@@ -247,23 +258,34 @@ def summarize_study(study: list[dict]) -> str:
     if not study:
         return ""
     df = pd.DataFrame(study)
-    out = ["高値・安値が「当日出来高の何%を消化した時点」で付いたか（前日比±5%以上の銘柄日）"]
-    for col, name in (("high_vol_share", "高値"), ("low_vol_share", "安値")):
-        q = df[col].quantile([0.25, 0.5, 0.75])
-        out.append(f"  {name}: 中央値 {q[0.5]:.0%}（25%〜75%の範囲 {q[0.25]:.0%}〜{q[0.75]:.0%}）")
-    early = (df["high_time"] < "09:30").mean()
-    out.append(f"  高値が9:30より前（寄り天型）: {early:.0%} / 14:30以降（引け高型）: {(df['high_time'] >= '14:30').mean():.0%}")
-    fl = df.dropna(subset=["high_float_turnover"])
-    if len(fl):
-        out.append(f"  浮動株回転率（{len(fl)}件）: 高値時 中央値 {fl['high_float_turnover'].median():.0%}"
-                   f" / 安値時 中央値 {fl['low_float_turnover'].median():.0%}")
+    out = []
+
+    def block(d, title):
+        if not len(d):
+            return
+        out.append(f"{title}（{len(d):,}銘柄日）")
+        for col, name in (("high_vol_share", "高値"), ("low_vol_share", "安値")):
+            q = d[col].quantile([0.25, 0.5, 0.75])
+            out.append(f"  {name}: 当日出来高の 中央値 {q[0.5]:.0%} 時点（25%〜75%の範囲 {q[0.25]:.0%}〜{q[0.75]:.0%}）")
+        out.append(f"  高値が9:30より前（寄り天型）: {(d['high_time'] < '09:30').mean():.0%}"
+                   f" / 14:30以降（引け高型）: {(d['high_time'] >= '14:30').mean():.0%}")
+        fl = d.dropna(subset=["high_float_turnover"])
+        if len(fl):
+            out.append(f"  浮動株回転率（{len(fl)}件）: 高値時 中央値 {fl['high_float_turnover'].median():.0%}"
+                       f" / 安値時 中央値 {fl['low_float_turnover'].median():.0%}"
+                       f" / 1日合計 中央値 {fl['day_float_turnover'].median():.0%}")
+
+    block(df, "高値・安値が「当日出来高の何%を消化した時点」で付いたか：前日比±5%以上の全銘柄日")
+    if "day_rvol" in df:
+        for lo, hi, name in ((3, 10, "日出来高が60日平均の3〜10倍"), (10, 1e9, "日出来高が60日平均の10倍以上")):
+            block(df[(df["day_rvol"] >= lo) & (df["day_rvol"] < hi)], f"出来高急増日に限定：{name}")
     return "\n".join(out)
 
 
 # ---------------- 時間帯をそろえた相対出来高（RVOL） ----------------
 
 RVOL_BUCKETS = [(0, 1, "1倍未満"), (1, 2, "1〜2倍"), (2, 3, "2〜3倍"), (3, 5, "3〜5倍"),
-                (5, 10, "5〜10倍"), (10, 20, "10〜20倍"), (20, float("inf"), "20倍以上")]
+                (5, 10, "5〜10倍"), (10, 20, "10〜20倍"), (20, 50, "20〜50倍"), (50, float("inf"), "50倍以上")]
 
 
 def rvol_bucket(v) -> str:
@@ -353,6 +375,52 @@ def rvol_table(rows: list[dict], min_n: int = 30) -> tuple[str, list[dict]]:
     return "\n".join(lines), recs
 
 
+FOCUS = [  # 期間別に安定性を確かめる組み合わせ（ルール, 種類の判定, RVOLの範囲, 名前）
+    ("R10", lambda lv: lv == "年初来高値", 2, 10, "年初来高値 × RVOL2〜10倍（買い）"),
+    ("R10", lambda lv: lv == "年初来高値", 0, 1e9, "年初来高値（全体）"),
+    ("R2", lambda lv: lv in ("8%", "10%"), 20, 1e9, "VWAP乖離+8%以上 × RVOL20倍以上（天井）"),
+    ("R2", lambda lv: lv in ("8%", "10%"), 2, 20, "VWAP乖離+8%以上 × RVOL2〜20倍"),
+    ("R3", lambda lv: True, 20, 1e9, "失速 × RVOL20倍以上（天井）"),
+    ("R4", lambda lv: True, 20, 1e9, "ダブルトップ × RVOL20倍以上（天井）"),
+    ("R10", lambda lv: group_label("R10", lv) == "+25%以上の段階", 10, 1e9, "+25%以上 × RVOL10倍以上（利確）"),
+]
+
+
+def period_of(ts) -> str:
+    m = ts.month
+    return "12〜2月" if m in (12, 1, 2) else "3〜4月" if m in (3, 4) else "5〜6月" if m in (5, 6) else f"{m}月"
+
+
+def period_table(rows: list[dict], alerts) -> tuple[str, list[dict]]:
+    """提案した組み合わせが、期間（12〜2月・3〜4月・5〜6月）ごとに同じ向きに効くか。"""
+    from .evaluate import OUTLIER
+
+    periods = sorted({period_of(a.ts) for a in alerts}, key=lambda p: ["12〜2月", "3〜4月", "5〜6月"].index(p)
+                     if p in ("12〜2月", "3〜4月", "5〜6月") else 9)
+    recs = []
+    lines = ["期間別の安定性（30分後の平均 / 中央値 / 件数。期待方向に動いたらプラス）",
+             f"{'組み合わせ':<34}" + "".join(f"{p:>26}" for p in periods)]
+    for rule, ok, lo, hi, name in FOCUS:
+        cells = []
+        for p in periods:
+            vals = []
+            for r, a in zip(rows, alerts):
+                if r["rule"] != rule or not ok(r["level"]) or period_of(a.ts) != p:
+                    continue
+                v = r.get("rvol")
+                if v is None or not (lo <= v < hi):
+                    continue
+                if r["ret30"] is not None and abs(r["ret30"]) <= OUTLIER:
+                    vals.append(r["ret30"] * (r["dir"] or 1))
+            avg = sum(vals) / len(vals) if vals else None
+            med = sorted(vals)[len(vals) // 2] if vals else None
+            recs.append({"combo": name, "period": p, "n": len(vals), "avg30": avg, "med30": med})
+            cells.append("-" if not vals else f"{avg:+.2%} / {med:+.2%} / {len(vals)}")
+        lines.append(f"{name:<34}" + "".join(f"{c:>26}" for c in cells))
+    lines.append("※3期間とも平均・中央値がプラスなら「安定して効く」。件数30未満は参考程度。")
+    return "\n".join(lines), recs
+
+
 def inspect(path: str):
     if path.lower().endswith(".7z"):
         try:
@@ -413,13 +481,16 @@ def main():
     summary = summarize(rows)
     write_csv(out / "eval.csv", rows)
     write_csv(out / "evalsum.csv", summary)
-    study = turnover_study(used, known)
+    study = turnover_study(used, known, daily_rvol(bars))
     write_csv(out / "turnover_study.csv", study)
     print(f"\n通知 {len(rows):,}件\n")
     print(format_summary(summary))
     print("\n" + summarize_study(study))
     text, recs = rvol_table(rows)
     write_csv(out / "evalsum_rvol.csv", recs)
+    print("\n" + text)
+    text, recs = period_table(rows, alerts)
+    write_csv(out / "evalsum_period.csv", recs)
     print("\n" + text)
     print(f"\n保存先: {out}")
 
