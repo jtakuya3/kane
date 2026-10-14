@@ -28,11 +28,15 @@ class RuleConfig:
     # R10 株価の段階（前日終値比）＋年初来高値更新
     price_step: float = 0.05
     price_step_down: bool = True  # 下落側（−5%, −10%…）も出す
-    # R13 大口板（見えている板より桁違いに大きい板が急に出た）
+    # R13 大口板（見えている板より桁違いに大きい板）の剥がれ予兆
     wall_mult: float = 10.0  # 周りの板（20本の中央値）の何倍以上か
     wall_min_yen: float = 50_000_000  # 板の金額（値段×数量）がこれ未満なら無視（5,000万円）
     wall_new_ratio: float = 0.5  # 直前の同じ値段の板がこの割合未満だった＝急に出た
     wall_cooldown_sec: int = 300
+    wall_warn_ratio: float = 0.5  # 見張り中の大口板がピークのこの割合以下に減ったら「剥がれ予兆」
+    wall_gone_ratio: float = 0.2  # この割合以下（または値段を突き抜けた）で「剥がれ」
+    wall_notify_appear: bool = False  # 大口板が出たこと自体も通知するか
+    wall_notify_gone: bool = True  # 剥がれ（消えた・突き抜けた）も通知するか
     # R14 ストップ高の剥がれ
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10

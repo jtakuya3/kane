@@ -41,6 +41,8 @@ def expected_dir(rule: str, level: str) -> int:
         return -1
     if rule == "R9":
         return 1
+    if rule == "R13" and "剥がれ" in level:  # 売り板が剥がれる→上、買い板が剥がれる→下
+        return 1 if level.startswith("売り") else -1
     if rule == "R13":
         return 1 if level == "買い" else -1 if level == "売り" else 0
     if rule == "R10":

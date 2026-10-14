@@ -49,7 +49,7 @@ NORMAL_SELL = [(2001 + i, 1500 + i * 100) for i in range(10)]
 
 
 def test_r13_big_board_appears():
-    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    e = eng(float_shares=None, wall_min_yen=3_000_000, wall_notify_appear=True)
     wall_sell = list(NORMAL_SELL)
     wall_sell[3] = (2004, 30_000)  # 急に3万株の売り板
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell),
@@ -60,7 +60,7 @@ def test_r13_big_board_appears():
 
 
 def test_r13_ignores_existing_wall_and_startup_and_small_amount():
-    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    e = eng(float_shares=None, wall_min_yen=3_000_000, wall_notify_appear=True)
     wall_buy = list(NORMAL_BUY)
     wall_buy[2] = (1998, 30_000)
     a = run(e, [board_snap(0, wall_buy, NORMAL_SELL), board_snap(1, wall_buy, NORMAL_SELL)])
@@ -68,8 +68,62 @@ def test_r13_ignores_existing_wall_and_startup_and_small_amount():
     cheap = [(p / 20, q) for p, q in NORMAL_BUY]
     cheap_wall = list(cheap)
     cheap_wall[1] = (cheap[1][0], 30_000)  # 100円×3万株=300万円未満
-    e2 = eng(float_shares=None, wall_min_yen=3_000_000)
+    e2 = eng(float_shares=None, wall_min_yen=3_000_000, wall_notify_appear=True)
     a = run(e2, [board_snap(0, cheap, NORMAL_SELL, 100), board_snap(1, cheap_wall, NORMAL_SELL, 100)])
+    assert not rules_of(a, "R13")
+
+
+def test_r13_default_is_silent_on_appear():
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    wall_sell = list(NORMAL_SELL)
+    wall_sell[3] = (2004, 30_000)
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell)])
+    assert not rules_of(a, "R13")
+
+
+def test_r13_peel_warning_by_cancel_then_gone():
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    def sell_with(q):
+        w = list(NORMAL_SELL)
+        w[3] = (2004, q)
+        return w
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, sell_with(30_000)),
+                board_snap(2, NORMAL_BUY, sell_with(25_000)),
+                board_snap(3, NORMAL_BUY, sell_with(14_000)),   # ピークの47% → 予兆
+                board_snap(4, NORMAL_BUY, sell_with(12_000)),   # 予兆は1回だけ
+                board_snap(5, NORMAL_BUY, sell_with(3_000))])   # 10% → 剥がれ
+    r13 = rules_of(a, "R13")
+    assert [x.level for x in r13] == ["売り板剥がれ予兆", "売り板剥がれ"]
+    assert "ピーク 30,000株 → 14,000株（47%）  上に抜けやすい" in r13[0].message
+    assert "取り消し 16,000株" in r13[0].message
+
+
+def test_r13_wall_eaten_through():
+    """最良売り気配の大口売り板が約定で食われ、株価が突き抜ける。"""
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    sell = [(2001, 30_000)] + NORMAL_SELL[1:]
+    def s(sec, q, vol, buy=NORMAL_BUY, sell_=None):
+        x = board_snap(sec, buy, sell_ or [(2001, q)] + NORMAL_SELL[1:])
+        x.volume = vol
+        return x
+    up_buy = [(2001 - i, 1000) for i in range(10)]
+    up_sell = [(2002 + i, 1500) for i in range(10)]
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), s(1, 30_000, 1000), s(2, 12_000, 19_000),
+                s(3, 0, 32_000, up_buy, up_sell)])
+    r13 = rules_of(a, "R13")
+    assert [x.level for x in r13] == ["売り板剥がれ予兆", "売り板剥がれ"]
+    assert "約定で食われた 18,000株 / 取り消し 0株" in r13[0].message
+    assert "突き抜けた" in r13[1].message
+
+
+def test_r13_wall_out_of_view_is_dropped_silently():
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    wall_sell = list(NORMAL_SELL)
+    wall_sell[9] = (2010, 30_000)
+    down_sell = [(1995 + i, 1500) for i in range(10)]  # 株価が下がり、2010円は見えなくなった
+    down_buy = [(1994 - i, 1000) for i in range(10)]
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell),
+                board_snap(2, down_buy, down_sell, 1995)])
     assert not rules_of(a, "R13")
 
 
@@ -105,7 +159,7 @@ def test_upper_limit_table():
 
 
 def test_r13_default_requires_50m_yen():
-    e = eng(float_shares=None)
+    e = eng(float_shares=None, wall_notify_appear=True)
     wall_sell = list(NORMAL_SELL)
     wall_sell[3] = (2004, 20_000)  # 約4,008万円 → 出ない
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell)])
@@ -117,7 +171,7 @@ def test_r13_default_requires_50m_yen():
 
 def test_r13_ignores_wall_scrolling_into_view():
     """株価が動いて、前からあった大口板が見える範囲に入ってきただけなら通知しない。"""
-    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    e = eng(float_shares=None, wall_min_yen=3_000_000, wall_notify_appear=True)
     # 売り板を2円上にずらす：前の範囲(1991〜2010)の外にある2011円の3万株が新たに見える
     shifted_sell = [(2003 + i, 1500 + i * 100) for i in range(9)] + [(2011, 30_000)]
     shifted_buy = [(2002 - i, 1000 + i * 100) for i in range(10)]

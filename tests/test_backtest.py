@@ -130,3 +130,26 @@ def test_period_table_and_daily_rvol(tmp_path):
     bars = pd.DataFrame({"code": ["X"] * 22, "dt": days, "volume": [100.0] * 21 + [1000.0]})
     drv = daily_rvol(bars)
     assert round(drv[("X", days[-1].date())], 1) == 10.0
+
+
+def test_early_study_detects_ignition_next_bar_entry():
+    import numpy as np
+    import pandas as pd
+
+    from kane.early import study, summary
+
+    rows = []
+    days = pd.bdate_range("2026-01-05", periods=40)
+    for i, d in enumerate(days):
+        for m in range(0, 300, 5):
+            mm = m if m < 150 else m + 60
+            vol, p = 100_000, 1000.0
+            if i == 30 and m >= 30:
+                vol, p = (800_000 if m == 30 else 100_000), (1020.0 if m == 30 else 1050.0)
+            rows.append(("1111", d + pd.Timedelta(minutes=540 + mm), p, p, p, p, vol))
+    bars = pd.DataFrame(rows, columns=["code", "dt", "open", "high", "low", "close", "volume"])
+    recs, ctrl, nd = study(bars, 1e6)
+    a5 = [r for r in recs if r["variant"] == "A5"]
+    assert len(a5) == 1 and a5[0]["time"] == "09:35"
+    assert np.isclose(a5[0]["ret_30分"], 0.0)  # 次の足（1050円）で買う → 上昇後なので0%
+    assert "A 点火" in summary(recs, ctrl, nd)[0]

@@ -4,7 +4,7 @@
 - R10 利確警戒：前日比+25%以上 × RVOL 10倍以上
 - R2 VWAP乖離+8%以上 × RVOL 20倍以上（天井警戒）
 - R3 失速 / R4 ダブルトップ × RVOL 20倍以上（天井警戒）
-- R13 大口板 / R14 ストップ高（イベント通知）
+- R13 大口板の剥がれ予兆・剥がれ / R14 ストップ高（イベント通知）
 すべての通知に浮動株回転率とRVOLを添える。
 """
 from __future__ import annotations
@@ -177,37 +177,90 @@ def _in_continuous_session(ts: datetime) -> bool:
                      < t.replace(hour=12, minute=30, second=0, microsecond=0)))
 
 
+def _is_wall(side, p, q, qtys, cfg):
+    """周りの板（20本の中央値）の wall_mult 倍以上・金額 wall_min_yen 以上なら大口板。中央値も返す。"""
+    others = list(qtys)
+    others.remove(q)
+    med = others[len(others) // 2] if others else 0
+    return bool(med) and q >= med * cfg.wall_mult and p * q >= cfg.wall_min_yen, med
+
+
 def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    """見えている板より桁違いに大きい買い板・売り板が、直前まで見えていた範囲の中に急に出たとき。"""
-    prev = st.vars.get("prev_board")
+    """大口板を見張り、剥がれそうな予兆（ピークから減り始めた）と剥がれ（消えた・突き抜けた）を知らせる。
+
+    売り板の剥がれ＝上に抜けやすい、買い板の剥がれ＝下に抜けやすい。減った分は、その値段が最良気配で
+    出来高が増えていれば「約定で食われた」、そうでなければ「取り消された」と見なす。
+    """
+    v = st.vars
+    prev = v.get("prev_board")
     cur_buy, cur_sell = s.board_buy or [], s.board_sell or []
-    st.vars["prev_board"] = {p: q for p, q in cur_buy + cur_sell}
+    v["prev_board"] = {p: q for p, q in cur_buy + cur_sell}
+    prev_vol, v["r13_vol"] = v.get("r13_vol"), s.volume
     if not prev or not (cur_buy and cur_sell) or not _in_continuous_session(s.ts):
         return []  # 起動直後・寄り前・昼休みは判定しない
     if SPECIAL_SIGN in (s.buy1_sign, s.sell1_sign):
         return []  # 特別気配中は板が偏るのが普通なので除外
-    lo, hi = min(prev), max(prev)  # 直前に見えていた板の値段の範囲
+    walls = v.setdefault("walls", {})  # (側, 値段) → 見張り中の大口板
+    books = {"買い": dict(cur_buy), "売り": dict(cur_sell)}
+    traded = max(0.0, s.volume - prev_vol) if prev_vol is not None else 0.0
     out = []
+
+    # 1) 大口板を見つけて見張りに入れる
     levels = [("買い", p, q) for p, q in cur_buy] + [("売り", p, q) for p, q in cur_sell]
     qtys = sorted(q for _, _, q in levels)
+    lo, hi = min(prev), max(prev)
     for side, p, q in levels:
-        others = list(qtys)
-        others.remove(q)
-        med = others[len(others) // 2] if others else 0
-        if not med or q < med * cfg.wall_mult or p * q < cfg.wall_min_yen:
+        big, med = _is_wall(side, p, q, qtys, cfg)
+        if not big:
             continue
-        if not (lo <= p <= hi):
-            continue  # 株価が動いて、前から置いてあった板が見える範囲に入ってきただけ
-        if prev.get(p, 0) >= q * cfg.wall_new_ratio:
-            continue  # 前からあった板
-        if not st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec):
+        w = walls.get((side, p))
+        if w:
+            w["peak"] = max(w["peak"], q)
             continue
-        dist = p / s.price - 1
-        body = [
-            f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）",
-            f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{dist:+.2%}",
-        ]
-        out.append(_card(st, s, "R13", side, body, cfg, wall_price=p, wall_qty=q, wall_mult=q / med))
+        walls[(side, p)] = {"peak": q, "last": q, "eaten": 0.0, "cancel": 0.0, "warned": False,
+                            "since": s.ts, "med": med}
+        if (cfg.wall_notify_appear and lo <= p <= hi and prev.get(p, 0) < q * cfg.wall_new_ratio
+                and st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec)):
+            out.append(_card(st, s, "R13", side, [
+                f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）",
+                f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{p / s.price - 1:+.2%}",
+            ], cfg, wall_price=p, wall_qty=q, wall_mult=q / med))
+
+    # 2) 見張り中の大口板の減り方を見る
+    for (side, p), w in list(walls.items()):
+        book = books[side]
+        best = max(book) if side == "買い" else min(book)
+        far = min(book) if side == "買い" else max(book)
+        if (side == "買い" and p < far) or (side == "売り" and p > far):
+            del walls[(side, p)]  # 株価が離れて見えなくなった（判断できないので黙って外す）
+            continue
+        passed = p > best if side == "買い" else p < best  # 板の値段を突き抜けた
+        q = 0.0 if passed else book.get(p, 0.0)
+        drop = max(0.0, w["last"] - q)
+        if drop:
+            ate = min(drop, traded) if (passed or p == best) else 0.0
+            w["eaten"] += ate
+            w["cancel"] += drop - ate
+        w["last"] = q
+        hint = "上に抜けやすい" if side == "売り" else "下に抜けやすい"
+        how = f"約定で食われた {w['eaten']:,.0f}株 / 取り消し {w['cancel']:,.0f}株"
+        head = f"大口{side}板 {_yen(p)}円"
+        if passed or q <= w["peak"] * cfg.wall_gone_ratio:
+            del walls[(side, p)]
+            if cfg.wall_notify_gone:
+                what = "突き抜けた" if passed else "ほぼ消えた"
+                out.append(_card(st, s, "R13", f"{side}板剥がれ", [
+                    f"{head} 剥がれ（{what}）：ピーク {w['peak']:,.0f}株 → {q:,.0f}株  {hint}",
+                    how, f"現在値 {_yen(s.price)}円（板の値段から{s.price / p - 1:+.2%}）",
+                ], cfg, wall_price=p, wall_peak=w["peak"], wall_qty=q))
+            continue
+        if not w["warned"] and q <= w["peak"] * cfg.wall_warn_ratio:
+            w["warned"] = True
+            if st.cooled(("R13warn", side, p), s.ts, cfg.wall_cooldown_sec):
+                out.append(_card(st, s, "R13", f"{side}板剥がれ予兆", [
+                    f"{head} 剥がれ予兆：ピーク {w['peak']:,.0f}株 → {q:,.0f}株（{q / w['peak']:.0%}）  {hint}",
+                    how, f"現在値 {_yen(s.price)}円（板の値段まで{p / s.price - 1:+.2%}）",
+                ], cfg, wall_price=p, wall_peak=w["peak"], wall_qty=q))
     return out
 
 
