@@ -75,6 +75,6 @@ def test_rss_monitor_scan_filter(tmp_path):
 def test_vwap_from_value_when_missing():
     cfg = RssConfig(board_levels=0)
     wf = watch_fields(cfg)
-    vals = {"price": 2066, "volume": 1000, "vwap": "", "value": 2_000_000}
+    vals = {"price": 2066, "volume": 1000, "vwap": "", "value": 2_000}  # 千円
     snap, _ = row_to_snapshot("4498", wf, [vals.get(k, "") for k, _ in wf], TS, [])
     assert snap.vwap == 2000

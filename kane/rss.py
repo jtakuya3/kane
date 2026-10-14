@@ -67,7 +67,7 @@ def num(v) -> float | None:
 
 
 def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
-                    special_values: list[str]) -> tuple[Snapshot | None, dict]:
+                    special_values: list[str], value_unit: float = 1000) -> tuple[Snapshot | None, dict]:
     """シートの1行を Snapshot にする。2つ目の戻り値は年初来高値など Snapshot 以外の値。"""
     raw = {k: v for (k, _), v in zip(fields, row)}
     val = {k: num(v) for k, v in raw.items()}
@@ -90,7 +90,7 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
     vwap = val.get("vwap")
     vol, value = val.get("volume"), val.get("value")
     if not vwap and vol and value:
-        vwap = value / vol  # 売買代金 ÷ 出来高
+        vwap = value * value_unit / vol  # 売買代金（千円）÷ 出来高
 
     def sign(key):
         s = raw.get(key)

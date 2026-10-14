@@ -107,6 +107,7 @@ class RssConfig:
         "bid_sign": "", "ask_sign": "",  # 気配の状態（特別気配）の項目名。空なら R12 は判定しない
     })
     special_values: list = field(default_factory=lambda: ["特", "S", "特別気配"])
+    value_unit: float = 1000  # 楽天RSSの売買代金は千円単位
 
 
 @dataclass

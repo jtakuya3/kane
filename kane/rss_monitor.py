@@ -69,7 +69,7 @@ class RssMonitor:
             r0 = rows[0]
             v, q = r0[vw.index("value")], r0[vw.index("volume")]
             if isinstance(v, (int, float)) and isinstance(q, (int, float)) and q:
-                print(f"\nVWAP（売買代金÷出来高）: {self.watch[0].code} = {v / q:,.1f}")
+                print(f"\nVWAP（売買代金×{self.cfg.rss.value_unit:g}÷出来高）: {self.watch[0].code} = {v * self.cfg.rss.value_unit / q:,.1f}")
         bad = sorted({item for row in rows for (k, item), v in zip(self.wf, row)
                       if isinstance(v, int) and v < -2_000_000_000})
         if bad:
@@ -110,7 +110,8 @@ class RssMonitor:
                 if self.last.get(info.code) == key:
                     continue  # 変化なし
                 self.last[info.code] = key
-                snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values)
+                snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values,
+                                              self.cfg.rss.value_unit)
                 if info.code not in self.ytd_done and extra.get("ytd_high"):
                     # 最初に読めた年初来高値（寄り前なら前日までの値）を基準にする
                     if info.ytd_high is None:

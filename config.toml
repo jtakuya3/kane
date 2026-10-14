@@ -59,6 +59,7 @@ universe_csv = "universe.csv"   # スキャン用の銘柄一覧（python -m kan
 max_scan = 600
 scan_rules = ["R10", "R11", "R12", "R14"]   # スキャン銘柄で通知するルール
 scan_min_value_yen = 100000000              # スキャン銘柄は売買代金1億円以上だけ通知
+value_unit = 1000          # 楽天RSSの売買代金は千円単位
 
 # RssMarket の項目名。check.bat でエラーが出た項目は、公式の関数一覧の表記に書き換える
 [rss.items]
