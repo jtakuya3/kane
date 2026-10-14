@@ -5,6 +5,7 @@
 - R2 VWAP乖離+8%以上 × RVOL 20倍以上（天井警戒）
 - R3 失速 / R4 ダブルトップ × RVOL 20倍以上（天井警戒）
 - R13 大口板の剥がれ予兆・剥がれ / R14 ストップ高（イベント通知）
+- R15 出来高の年初来更新・年初来ペース（注目の知らせ。方向は決めない）
 すべての通知に浮動株回転率とRVOLを添える。
 """
 from __future__ import annotations
@@ -164,6 +165,32 @@ def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]
             f"利確警戒：前日比 {step} × 出来高{rv:.0f}倍（ここから押されやすい）", price_line], cfg, change=chg))
     elif cfg.price_step_alerts and (step_up or step_down):
         out.append(_card(st, s, "R10", step, [f"株価の段階 {step}", price_line], cfg, change=chg))
+    return out
+
+
+def r15_ytd_volume(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """出来高の年初来記録。
+    - 年初来ペース：この時刻までの出来高 ≧ 今年の最大日出来高 × この時刻までに普段出る割合
+      （今年いちばん出来高が多かった日を、このままのペースなら上回る）
+    - 年初来更新：当日の出来高が今年の最大日出来高を超えた
+    """
+    mx = st.info.ytd_max_vol
+    if not mx or not s.volume:
+        return []
+    out = []
+    when = f"（{st.info.ytd_max_date}）" if st.info.ytd_max_date else ""
+    vol = f"出来高 {s.volume:,.0f}株 / 今年の最大 {mx:,.0f}株{when}"
+    price = f"株価 {_yen(s.price)}円{_pct_prev(s)}  {_vwap_txt(st)}".rstrip()
+    if cfg.ytd_vol_alerts and s.volume > mx and st.once("R15ytd"):
+        out.append(_card(st, s, "R15", "年初来更新", [
+            f"出来高 年初来更新：今年いちばん出来高が多かった日を超えた", vol, price], cfg))
+        st.fired.add("R15pace")  # 更新後にペースの通知は出さない
+    elif cfg.ytd_pace_alerts and f"{s.ts:%H:%M}" >= cfg.ytd_pace_from:
+        frac = max(vol_frac(s.ts, cfg.volume_profile), 0.03)
+        if s.volume >= mx * frac and st.once("R15pace"):
+            out.append(_card(st, s, "R15", "年初来ペース", [
+                f"出来高 年初来ペース：この時刻までで今年最大の日を上回るペース（最大日の推定{mx * frac:,.0f}株）",
+                vol, price], cfg))
     return out
 
 
@@ -344,6 +371,6 @@ def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
                    f"天井警戒：高値圏で失速（1分出来高がピークの{b.volume / peak:.0%}）", cfg)]
 
 
-SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high]
+SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high, r15_ytd_volume]
 BAR_RULES = [r3_stall]
 LIGHT_RULES = [r10_price_step]

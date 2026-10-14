@@ -51,6 +51,10 @@ class RuleConfig:
     r2_min_level: float = 0.08  # VWAP乖離は+8%以上だけ
     fade_step: float = 0.25  # 前日比+25%以上 × RVOL 10倍以上 → 利確警戒
     fade_rvol_min: float = 10.0
+    # R15 出来高の年初来記録（方向の合図ではなく「異常な注目」の知らせ）
+    ytd_vol_alerts: bool = True  # 当日の出来高が今年の最大日出来高を超えた
+    ytd_pace_alerts: bool = True  # この時刻までの出来高が、今年の最大日の「この時刻までの推定」を超えた
+    ytd_pace_from: str = "09:05"  # ペース判定はこの時刻から（寄り直後は出来高の割合がぶれる）
     price_step_alerts: bool = False  # 5%刻みの段階通知（検証で優位性なし）を出すか
     # 時刻（9:00からの分）→ その時刻までに1日の出来高の何割が出るか（市場全体の平均）
     volume_profile: list = field(default_factory=lambda: [
@@ -90,7 +94,7 @@ class RssConfig:
     universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
     max_scan: int = 600
     # スキャン銘柄で通知するルール（固定銘柄は全ルール）
-    scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14"])
+    scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14", "R15"])
     scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
     # RssMarket の項目名（公式の関数一覧・数式登録エディタの表記に合わせて変更できる）
     items: dict = field(default_factory=lambda: {
@@ -115,6 +119,8 @@ class SymbolInfo:
     ytd_high: float | None = None  # 前日までの年初来高値
     group: str = ""  # 固定監視のグループ名（ipo / security など）
     avg_vol: float | None = None  # 過去60営業日の平均日出来高（baseline.csv）
+    ytd_max_vol: float | None = None  # 今年の最大日出来高（前日まで）
+    ytd_max_date: str = ""
 
 
 @dataclass
@@ -139,7 +145,7 @@ class Config:
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)
     base_dir: Path = Path(".")
-    baseline: dict = field(default_factory=dict)  # 銘柄 → 平均日出来高
+    baseline: dict = field(default_factory=dict)  # 銘柄 → {"avg_vol", "ytd_max_vol", "ytd_max_date"}
 
 
 def load_baseline(data_dir: Path) -> dict:
@@ -148,11 +154,24 @@ def load_baseline(data_dir: Path) -> dict:
     if p.exists():
         with open(p, encoding="utf-8-sig", newline="") as f:
             for r in csv.DictReader(f):
-                try:
-                    out[r["code"].strip()] = float(r["avg_vol"])
-                except (KeyError, ValueError):
-                    continue
+                def num(k):
+                    try:
+                        return float(r.get(k) or "")
+                    except ValueError:
+                        return None
+                code = (r.get("code") or "").strip()
+                if code:
+                    out[code] = {"avg_vol": num("avg_vol"), "ytd_max_vol": num("ytd_max_vol"),
+                                 "ytd_max_date": (r.get("ytd_max_date") or "").strip()}
     return out
+
+
+def apply_baseline(info: "SymbolInfo", baseline: dict) -> "SymbolInfo":
+    b = baseline.get(info.code) or {}
+    info.avg_vol = b.get("avg_vol")
+    info.ytd_max_vol = b.get("ytd_max_vol")
+    info.ytd_max_date = b.get("ytd_max_date", "")
+    return info
 
 
 def load_profile(data_dir: Path) -> list | None:
@@ -216,7 +235,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     symbols = load_symbols(p(paths.get("symbols_csv", "symbols.csv")))
     baseline = load_baseline(data_dir)
     for sy in symbols:
-        sy.avg_vol = baseline.get(sy.code)
+        apply_baseline(sy, baseline)
     return Config(
         base_url=kabu.get("base_url", "http://localhost:18080/kabusapi"),
         ws_url=kabu.get("ws_url", "ws://localhost:18080/kabusapi/websocket"),

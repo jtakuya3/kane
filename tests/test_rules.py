@@ -231,3 +231,27 @@ def test_r10_buy_candidate_and_fade():
     assert rules_of(run(e10(1_000), [s(60, 1468, 50_000)]), "R10") == []  # RVOL 50倍 → 買い候補は出さない
     a = run(e10(1_000), [s(60, 1750, 50_000)])  # +25%超 × RVOL 50倍 → 利確警戒
     assert [x.level for x in rules_of(a, "R10")] == ["利確警戒"]
+
+
+def test_r15_ytd_volume_pace_then_record():
+    prof = [[0, 0.0], [60, 0.5], [390, 1.0]]  # 10:00までに1日の半分
+    e = Engine([SymbolInfo("TEST", "テスト", None, avg_vol=10_000, ytd_max_vol=100_000,
+                           ytd_max_date="2026/03/02")], RuleConfig(volume_profile=prof))
+
+    def s(h, m, vol):
+        return Snapshot(T0.replace(hour=h, minute=m), "TEST", 1000, vol, vwap=1000, prev_close=950)
+
+    a = run(e, [s(9, 3, 90_000),        # 9:05より前はペース判定しない
+                s(10, 0, 40_000),       # 最大日の推定5万株に届かない（出来高が戻ることは実際にはないがテスト用）
+                s(10, 0, 50_000),       # 5万株 → 年初来ペース
+                s(10, 30, 70_000),      # ペースは1日1回
+                s(11, 0, 100_001)])     # 年初来更新
+    r15 = rules_of(a, "R15")
+    assert [x.level for x in r15] == ["年初来ペース", "年初来更新"]
+    assert "今年の最大 100,000株（2026/03/02）" in r15[1].message
+
+
+def test_r15_record_without_pace_suppresses_later_pace():
+    e = Engine([SymbolInfo("TEST", "テスト", None, ytd_max_vol=1_000)], RuleConfig(volume_profile=FLAT))
+    a = run(e, [Snapshot(T0.replace(minute=6), "TEST", 100, 2_000), Snapshot(T0.replace(minute=7), "TEST", 100, 3_000)])
+    assert [x.level for x in rules_of(a, "R15")] == ["年初来更新"]

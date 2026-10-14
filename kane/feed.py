@@ -17,6 +17,7 @@ COLORS = {
     "important": ("#c62828", "#ffffff"),  # 大口板・ストップ高など popup_rules
     "buy": ("#1b5e20", "#ffffff"),  # R10 買い候補（年初来高値 × RVOL 2〜10倍）
     "warn": ("#e65100", "#ffffff"),  # 天井警戒（R2・R3・R4 × RVOL 20倍以上）/ R10 利確警戒
+    "volume": ("#0d47a1", "#ffffff"),  # R15 出来高の年初来記録
     "info": ("#1e1e1e", "#e0e0e0"),
 }
 BUY_RULES = {"R10:買い候補"}
@@ -30,6 +31,8 @@ def color_key(rule: str, important: bool) -> str:
         return "buy"
     if rule in WARN_RULES or rule.split(":")[0] in WARN_RULES:
         return "warn"
+    if rule.split(":")[0] == "R15":
+        return "volume"
     return "info"
 
 

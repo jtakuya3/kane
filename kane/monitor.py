@@ -15,7 +15,7 @@ from datetime import datetime, time, timedelta
 
 import websockets
 
-from .config import Config, SymbolInfo, load_config
+from .config import Config, SymbolInfo, apply_baseline, load_config
 from .engine import Engine
 from .kabu import KabuClient, KabuError, parse_push
 from .models import Snapshot
@@ -167,8 +167,7 @@ class Monitor:
                 cands = await asyncio.to_thread(sc.fetch)
                 now = datetime.now()
                 for c in cands.values():
-                    self.engine.add_symbol(SymbolInfo(c.code, c.name, None,
-                                                      avg_vol=self.cfg.baseline.get(c.code)))
+                    self.engine.add_symbol(apply_baseline(SymbolInfo(c.code, c.name, None), self.cfg.baseline))
                 add, remove = sc.select(cands, now)
                 if remove:
                     await asyncio.to_thread(self.client.unregister, remove)

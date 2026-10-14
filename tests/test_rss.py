@@ -107,3 +107,20 @@ def test_parse_rsschart_rakuten_layout():
          ("A", "東証", "日足", "2026/10/13", "", 1, 2, 1, 2, 1000, None, None),
          ("A", "東証", "日足", "2026/10/14", "", 1, 2, 1, 2, 3000, None, None)]
     assert parse_chart(t, date(2026, 10, 14)) == [1000]
+
+
+def test_baseline_summary_ytd_max():
+    from kane.baseline import summarize_rows
+    rows = [("2025/12/30", 9_000), ("2026/01/05", 3_000), ("2026/03/02", 8_000), ("2026/10/13", 1_000)]
+    r = summarize_rows(rows, 2026)
+    assert r["ytd_max_vol"] == 8_000 and r["ytd_max_date"] == "2026/03/02" and r["avg_vol"] == 5_250
+
+
+def test_load_baseline_old_and_new_format(tmp_path):
+    from kane.config import SymbolInfo, apply_baseline, load_baseline
+    (tmp_path / "baseline.csv").write_text("code,avg_vol,days,ytd_max_vol,ytd_max_date,updated\n"
+                                           "4498,1000,60,9000,2026/03/02,2026-10-14\n9999,500,60,,,x\n")
+    b = load_baseline(tmp_path)
+    i = apply_baseline(SymbolInfo("4498", "", None), b)
+    assert i.avg_vol == 1000 and i.ytd_max_vol == 9000 and i.ytd_max_date == "2026/03/02"
+    assert apply_baseline(SymbolInfo("9999", "", None), b).ytd_max_vol is None

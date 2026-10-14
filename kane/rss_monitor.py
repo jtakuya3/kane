@@ -10,7 +10,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from .config import Config
+from .config import Config, apply_baseline
 from .engine import Engine
 from .rss import SCAN_SHEET, WATCH_SHEET, ExcelRss, RssError, load_universe, row_to_snapshot, scan_fields, watch_fields
 from .sinks import Notifier, Recorder
@@ -35,7 +35,7 @@ class RssMonitor:
         self.pinned = {s.code for s in self.watch}
         self.scan = load_universe(cfg.base_dir / r.universe_csv, self.pinned, r.max_scan)
         for s_ in self.scan:
-            s_.avg_vol = cfg.baseline.get(s_.code)
+            apply_baseline(s_, cfg.baseline)
         self.wf, self.sf = watch_fields(r), scan_fields(r)
         self.engine = Engine(self.watch + self.scan, cfg.rules, on_bar=self.recorder.bar)
         self.infos = {s.code: s for s in self.watch + self.scan}
@@ -43,6 +43,7 @@ class RssMonitor:
         self.last: dict[str, tuple] = {}
         self.ytd_done: set[str] = set()
         self.count = 0
+        self.stat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
 
     # ---- 準備 ----
     def setup_sheets(self):
@@ -79,9 +80,11 @@ class RssMonitor:
         if bad:
             print("\nエラーになった項目（項目名が違う可能性。config.toml の [rss.items] で直せます）:", bad)
         if self.scan:
+            t0 = time.monotonic()
             srows = self.rss.read(SCAN_SHEET, len(self.scan), len(self.sf))
+            sec = time.monotonic() - t0
             got = sum(1 for r in srows if r and r[0] not in (None, ""))
-            print(f"\nスキャン：{len(self.scan)}銘柄中 {got}銘柄で現在値を取得")
+            print(f"\nスキャン：{len(self.scan)}銘柄中 {got}銘柄で現在値を取得（読み取り {sec:.2f}秒）")
         print("Slack:", "送信する" if self.notifier.url else "送信しない（画面のアラート窓のみ）")
 
     # ---- 通知 ----
@@ -114,6 +117,7 @@ class RssMonitor:
                 if self.last.get(info.code) == key:
                     continue  # 変化なし
                 self.last[info.code] = key
+                self.stat["changed"] += 1
                 snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values,
                                               self.cfg.rss.value_unit)
                 if info.code not in self.ytd_done and extra.get("ytd_high"):
@@ -129,6 +133,19 @@ class RssMonitor:
                 alerts += self.engine.process(snap)
         alerts += self.engine.tick(now)
         self.emit(alerts, snaps)
+
+    def _log_speed(self, sec: float, every: float = 300):
+        """全銘柄スキャンに耐えられるかの目安：5分ごとに読み取り1回の時間と、値が動いた銘柄数を記録する。"""
+        st = self.stat
+        st["n"] += 1
+        st["sec"] += sec
+        st["max"] = max(st["max"], sec)
+        el = time.monotonic() - st["t"]
+        if el < every:
+            return
+        log.info("速度：読み取り1回 平均%.2f秒（最大%.2f秒）/ 固定%d＋スキャン%d銘柄 / 値が動いた銘柄 1回あたり%.0f",
+                 st["sec"] / st["n"], st["max"], len(self.watch), len(self.scan), st["changed"] / st["n"])
+        self.stat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
 
     # ---- メインループ ----
     def run(self):
@@ -163,6 +180,7 @@ class RssMonitor:
                     except Exception as e2:
                         log.warning("再接続失敗: %s", e2)
                     continue
+                self._log_speed(time.monotonic() - t0)
                 time.sleep(max(0.05, self.cfg.rss.poll_sec - (time.monotonic() - t0)))
             self.notifier.send(f"kane監視（楽天RSS）終了（本日の通知 {self.count}件）")
             time.sleep(60)

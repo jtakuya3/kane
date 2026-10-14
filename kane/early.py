@@ -13,6 +13,8 @@
 - 比較：現行の買い候補（年初来高値を抜けて+2%以内 × RVOL 2〜10倍）と、条件なしの平均
 - ショート側（下がれば当たり）：R2 VWAP乖離+8%/+10%以上 × RVOL20倍以上、利確警戒 前日比+25%以上 × RVOL10倍以上
   （R3失速・R4ダブルトップは1分足の形を見るルールなので、5分足のここでは検証しない）
+- 出来高の年初来記録（R15）：当日の出来高が今年の最大日を超えた / この時刻までで今年最大の日を上回るペース。
+  方向を決めない「注目」の知らせなので、上がればプラスで表示する（その後どちらに動きやすいかを見る）
 どれも1銘柄1日1回（最初に条件を満たした足）、その時点の売買代金の累計が --min-value 以上だけ。
 """
 from __future__ import annotations
@@ -56,6 +58,11 @@ def variants():
         ("C5", "C 高値の手前 RVOL5倍以上", cc(5)),
         ("BUY", "現行 買い候補（高値抜け×RVOL2〜10倍）",
          lambda c: (c["P"] > c["ytd"]) & (c["P"] <= c["ytd"] * 1.02) & (c["rvol"] >= 2) & (c["rvol"] < 10)),
+        ("V_YTD", "出来高 年初来更新（当日累計＞今年の最大日）", lambda c: c["cumV"] > c["ytdv"]),
+        ("V_PACE", "出来高 年初来ペース（9:05以降）",
+         lambda c: (c["cumV"] >= c["ytdv"] * c["frac"]) & (c["smin"] >= 5)),
+        ("V_PACE_UP", "出来高 年初来ペース × 前日比プラス",
+         lambda c: (c["cumV"] >= c["ytdv"] * c["frac"]) & (c["smin"] >= 5) & (c["chg"] > 0)),
         ("S_R2_8", "売 R2 VWAP乖離+8%以上×RVOL20倍以上", lambda c: (c["dev"] >= 0.08) & (c["rvol"] >= 20)),
         ("S_R2_10", "売 R2 VWAP乖離+10%以上×RVOL20倍以上", lambda c: (c["dev"] >= 0.10) & (c["rvol"] >= 20)),
         ("S_R2_8x", "参考 売 VWAP乖離+8%以上（出来高条件なし）", lambda c: c["dev"] >= 0.08),
@@ -110,6 +117,13 @@ def study(bars, min_value: float, max_day_change: float = 0.4):
     for d in days_all:
         n_days[period_of(d.astype("datetime64[ms]").astype(datetime))] += 1
     hz = {k: max(1, v // step) for k, v in HORIZONS.items()}
+    from .backtest import volume_profile_from_bars
+    from .rules import vol_frac
+
+    prof = volume_profile_from_bars(bars, step)
+    base = datetime(2000, 1, 1, 9, 0)
+    # 足の終わりの時刻までに、普段1日の出来高の何割が出ているか（市場全体の平均。下限3%）
+    frac = np.array([max(vol_frac(base + timedelta(minutes=int(m) + step), prof), 0.03) for m in slots])
     mfe_n = hz["30分"]
 
     S = len(slots)
@@ -146,12 +160,16 @@ def study(bars, min_value: float, max_day_change: float = 0.4):
             dev = P / vwap - 1
         years = days.astype("datetime64[Y]").astype(int) + 1970
         ytd = np.full(D, np.nan)
+        ytdv = np.full(D, np.nan)  # 今年の最大日出来高（前日まで）
+        dayv = V.sum(axis=1)
         for y in np.unique(years):
             if not ytd_ok.get(y):
                 continue
             ix = np.flatnonzero(years == y)
             h = np.fmax.accumulate(hi[ix])
             ytd[ix[1:]] = h[:-1]
+            hv = np.maximum.accumulate(dayv[ix])
+            ytdv[ix[1:]] = hv[:-1]
         valid_day = np.isfinite(pc) & ~(move > max_day_change)
         # 次の足で買う
         E = np.full((D, S), np.nan)
@@ -164,7 +182,7 @@ def study(bars, min_value: float, max_day_change: float = 0.4):
         fwd["大引け"] = close[:, None] / E - 1
         ok = valid_day[:, None] & np.isfinite(E) & (cumPV >= min_value) & np.isfinite(P)
         ctx = {"P": P, "chg": chg, "dev": dev, "rvol": rvol, "burst": burst, "ytd": ytd[:, None],
-               "smin": slots[None, :]}
+               "smin": slots[None, :], "cumV": cumV, "ytdv": ytdv[:, None], "frac": frac[None, :]}
         # 比較用：条件なし（売買代金の条件だけ）の30分後
         r30 = fwd["30分"]
         cm = ok & np.isfinite(r30) & (np.abs(r30) <= OUTLIER)
