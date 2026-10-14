@@ -29,7 +29,7 @@ def test_row_to_snapshot_with_board_and_special_quote():
             "prev_close": 469, "ytd_high": 520, "bid_sign": "特",
             "bid_price1": 549, "bid_qty1": 14300, "ask_price1": "", "ask_qty1": "",
             "bid_price2": 548, "bid_qty2": 1000, "ask_price2": "", "ask_qty2": ""}
-    snap, extra = row_to_snapshot("3909", wf, [vals[k] for k, _ in wf], TS, cfg.special_values)
+    snap, extra = row_to_snapshot("3909", wf, [vals.get(k, "") for k, _ in wf], TS, cfg.special_values)
     assert snap.price == 549 and snap.bid == 549 and snap.buy1_qty == 14300 and snap.ask is None
     assert snap.buy1_sign == "0102" and snap.board_buy == [(549, 14300), (548, 1000)]
     assert extra["ytd_high"] == 520
