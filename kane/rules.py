@@ -1,6 +1,6 @@
 """検出ルール。バックテストで効いた「出来高の条件付き」の組み合わせだけを通知する。
 
-- R10 買い候補：年初来高値の更新 × RVOL 2〜10倍
+- R10 買い候補：年初来高値の更新 × RVOL 2〜10倍（既定で停止。偏りのない検証で優位性なし）
 - R10 利確警戒：前日比+25%以上 × RVOL 10倍以上
 - R2 VWAP乖離+8%以上 × RVOL 20倍以上（天井警戒）
 - R3 失速 / R4 ダブルトップ × RVOL 20倍以上（天井警戒）
@@ -153,7 +153,7 @@ def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]
     out = []
 
     ytd = st.info.ytd_high
-    if (ytd and ytd < s.price <= ytd * (1 + cfg.ytd_near) and rv is not None
+    if (cfg.buy_alerts and ytd and ytd < s.price <= ytd * (1 + cfg.ytd_near) and rv is not None
             and cfg.buy_rvol_min <= rv < cfg.buy_rvol_max and st.once("R10ytd")):
         out.append(_card(st, s, "R10", "買い候補", [
             f"買い候補：年初来高値 {_yen(ytd)}円を更新 × 出来高{rv:.1f}倍", price_line], cfg, change=chg))

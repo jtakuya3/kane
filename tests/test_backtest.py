@@ -32,7 +32,7 @@ def test_detect_japanese_columns():
 def test_backtest_end_to_end(tmp_path):
     bars = load_bars([str(make_bars(tmp_path))], "bars", {})
     known = {"4498": SymbolInfo("4498", "サイバートラスト", 7_285_800)}
-    alerts, book, used = run(bars, RuleConfig(), known, 0.05, None)
+    alerts, book, used = run(bars, RuleConfig(buy_alerts=True), known, 0.05, None)
     r10 = [a for a in alerts if a.rule == "R10"]
     assert [a.level for a in r10][:1] == ["買い候補"]
     rows = evaluate(alerts, book)
@@ -153,3 +153,24 @@ def test_early_study_detects_ignition_next_bar_entry():
     assert len(a5) == 1 and a5[0]["time"] == "09:35"
     assert np.isclose(a5[0]["ret_30分"], 0.0)  # 次の足（1050円）で買う → 上昇後なので0%
     assert "A 点火" in summary(recs, ctrl, nd)[0]
+
+
+def test_early_study_short_side_sign():
+    import pandas as pd
+
+    from kane.early import study
+
+    rows = []
+    days = pd.bdate_range("2026-01-05", periods=40)
+    for i, d in enumerate(days):
+        for m in range(0, 300, 5):
+            mm = m if m < 150 else m + 60
+            vol, p = 100_000, 1000.0
+            if i == 30:
+                vol = 3_000_000
+                p = 1000.0 if m < 30 else (1300.0 if m < 60 else 1200.0)  # 急騰 → 下落
+            rows.append(("1111", d + pd.Timedelta(minutes=540 + mm), p, p, p, p, vol))
+    bars = pd.DataFrame(rows, columns=["code", "dt", "open", "high", "low", "close", "volume"])
+    recs, _, _ = study(bars, 1e6)
+    s = [r for r in recs if r["variant"] == "S_R2_10"]
+    assert len(s) == 1 and s[0]["ret_大引け"] > 0  # 下がったので「当たり」＝プラス

@@ -43,6 +43,7 @@ class RuleConfig:
     limit_warn_cooldown_sec: int = 180
     # 出来高の前提（バックテストで効いた組み合わせだけ通知する）
     # RVOL＝その時刻までの出来高 ÷（過去60日の平均日出来高 × その時刻までに普段出る出来高の割合）
+    buy_alerts: bool = False  # 買い候補（全銘柄日・次の足で買う検証で優位性なし → 既定で出さない）
     buy_rvol_min: float = 2.0  # 年初来高値の更新 × RVOL 2〜10倍 → 買い候補
     buy_rvol_max: float = 10.0
     ytd_near: float = 0.02  # 年初来高値から+2%以内（抜けた直後）だけ

@@ -11,6 +11,8 @@
 - B 寄り後の初動：9:30まで × RVOL X倍以上 × 前日比 +3〜+5% × VWAP乖離 0〜+3%
 - C 高値の手前：年初来高値まであと2%以内（まだ抜けていない） × RVOL X倍以上
 - 比較：現行の買い候補（年初来高値を抜けて+2%以内 × RVOL 2〜10倍）と、条件なしの平均
+- ショート側（下がれば当たり）：R2 VWAP乖離+8%/+10%以上 × RVOL20倍以上、利確警戒 前日比+25%以上 × RVOL10倍以上
+  （R3失速・R4ダブルトップは1分足の形を見るルールなので、5分足のここでは検証しない）
 どれも1銘柄1日1回（最初に条件を満たした足）、その時点の売買代金の累計が --min-value 以上だけ。
 """
 from __future__ import annotations
@@ -54,7 +56,16 @@ def variants():
         ("C5", "C 高値の手前 RVOL5倍以上", cc(5)),
         ("BUY", "現行 買い候補（高値抜け×RVOL2〜10倍）",
          lambda c: (c["P"] > c["ytd"]) & (c["P"] <= c["ytd"] * 1.02) & (c["rvol"] >= 2) & (c["rvol"] < 10)),
+        ("S_R2_8", "売 R2 VWAP乖離+8%以上×RVOL20倍以上", lambda c: (c["dev"] >= 0.08) & (c["rvol"] >= 20)),
+        ("S_R2_10", "売 R2 VWAP乖離+10%以上×RVOL20倍以上", lambda c: (c["dev"] >= 0.10) & (c["rvol"] >= 20)),
+        ("S_R2_8x", "参考 売 VWAP乖離+8%以上（出来高条件なし）", lambda c: c["dev"] >= 0.08),
+        ("S_FADE", "売 利確警戒 前日比+25%以上×RVOL10倍以上", lambda c: (c["chg"] >= 0.25) & (c["rvol"] >= 10)),
     ]
+
+
+def direction(key: str) -> int:
+    """+1＝上がれば当たり、−1＝下がれば当たり（S_ で始まる案）。"""
+    return -1 if key.startswith("S_") else 1
 
 
 def _rolling_prev_mean(x: np.ndarray, window: int = 60, min_periods: int = 20) -> np.ndarray:
@@ -176,10 +187,12 @@ def study(bars, min_value: float, max_day_change: float = 0.4):
                 rec = {"variant": key, "code": code, "day": str(days[d])[:10], "time": t.strftime("%H:%M"),
                        "period": period_of(t), "chg": chg[d, j], "dev": dev[d, j], "rvol": rvol[d, j],
                        "burst": burst[d, j], "value_oku": cumPV[d, j] / 1e8}
+                sg = direction(key)  # 記録するリターンは「期待した方向に動いたらプラス」
                 for k in fwd:
-                    rec[f"ret_{k}"] = fwd[k][d, j]
-                rec["mfe30"] = np.nanmax(w) / e - 1 if len(w) else np.nan
-                rec["mae30"] = np.nanmin(w) / e - 1 if len(w) else np.nan
+                    rec[f"ret_{k}"] = fwd[k][d, j] * sg
+                up = np.nanmax(w) / e - 1 if len(w) else np.nan
+                down = np.nanmin(w) / e - 1 if len(w) else np.nan
+                rec["mfe30"], rec["mae30"] = (up, down) if sg > 0 else (-down, -up)
                 recs.append(rec)
     return recs, ctrl, n_days
 
@@ -207,7 +220,7 @@ def summary(recs, ctrl, n_days) -> tuple[str, list[dict]]:
     def avg(v):
         return sum(v) / len(v) if v else None
 
-    lines = ["早期検知 A〜C の成績（全銘柄日・次の5分足で買った場合。プラス＝上がった）",
+    lines = ["早期検知 A〜C とショート側の成績（全銘柄日・次の5分足で入った場合。プラス＝期待した方向に動いた）",
              f"{'案':<34}{'件数':>7}{'件/日':>7}{'当たり30分':>10}{'平均30分':>9}{'中央30分':>9}"
              f"{'平均60分':>9}{'平均大引け':>10}{'伸び30分':>9}{'逆行30分':>9}  中央時刻 中央前日比"]
     keys = [k for k, _, _ in variants()]
@@ -246,7 +259,8 @@ def summary(recs, ctrl, n_days) -> tuple[str, list[dict]]:
     ctl = [f"{ctrl[p][2] / ctrl[p][0]:+.2%}" if ctrl[p][0] else "-" for p in periods]
     lines.append(f"{'比較：条件なし':<34}" + "".join(f"{c:>26}" for c in ctl))
     lines.append("※「条件なし」より明らかに上で、3期間とも平均・中央値がプラスなら採用候補。"
-                 "件/日は全銘柄での1日あたりの通知数（少ないほど絞れている）。")
+                 "件/日は全銘柄での1日あたりの通知数（少ないほど絞れている）。"
+                 "「売」の行は下がればプラス（比較の「条件なし」は上がればプラスなので、ほぼ0との比較）。")
     return "\n".join(lines), rows
 
 

@@ -213,7 +213,12 @@ def test_r4_only_with_rvol20():
 def test_r10_buy_candidate_and_fade():
     def e10(avg):
         return Engine([SymbolInfo("4382", "ＨＥＲＯＺ", None, issued_shares=17_780_000, ytd_high=1460,
-                                  avg_vol=avg)], RuleConfig(volume_profile=FLAT))
+                                  avg_vol=avg)], RuleConfig(volume_profile=FLAT, buy_alerts=buy))
+
+    buy = False
+    assert rules_of(run(e10(10_000), [s0 := Snapshot(T0 + timedelta(seconds=61), "4382", 1468, 50_000,
+                                                     prev_close=1398)]), "R10") == []  # 既定では出さない
+    buy = True
 
     def s(sec, price, vol):
         return Snapshot(T0 + timedelta(seconds=sec), "4382", price, vol, prev_close=1398)
