@@ -96,3 +96,14 @@ def test_parse_rsschart_table():
              ("サイバートラスト", "東証", "日足", "2026/10/13", "", 1851, 1972, 1830, 1960, "12,000,000"),
              ("サイバートラスト", "東証", "日足", "2026/10/14", "", 1891, 2237, 1790, 2070, 19_960_800)]
     assert parse_chart(table, date(2026, 10, 14)) == [3_000_000, 12_000_000]
+
+
+def test_parse_rsschart_rakuten_layout():
+    from datetime import date
+
+    from kane.baseline import parse_chart
+    t = [("=@RssChart(...) => 取得完了",) + (None,) * 11,
+         ("銘柄名称", "市場名称", "足種", "日付", "時刻", "始値", "高値", "安値", "終値", "出来高", None, None),
+         ("A", "東証", "日足", "2026/10/13", "", 1, 2, 1, 2, 1000, None, None),
+         ("A", "東証", "日足", "2026/10/14", "", 1, 2, 1, 2, 3000, None, None)]
+    assert parse_chart(t, date(2026, 10, 14)) == [1000]

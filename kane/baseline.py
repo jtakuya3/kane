@@ -15,7 +15,8 @@ import argparse
 import csv
 import glob
 import time
-from datetime import date
+from datetime import date, datetime
+from datetime import time as dtime
 from pathlib import Path
 
 from .config import load_config
@@ -38,7 +39,11 @@ def parse_chart(table, today: date | None = None) -> list[float]:
     header = [str(c).strip() for c in rows[hi]]
     vi = header.index("出来高")
     di = next((i for i, h in enumerate(header) if h in ("日付", "年月日")), None)
-    today_s = (today or date.today()).strftime("%Y/%m/%d")
+    if today is None:
+        now = datetime.now()
+        # 取引時間中は今日の足が途中なので除く（大引け後に実行したときは今日も含める）
+        today = now.date() if now.time() < dtime(15, 30) else None
+    today_s = today.strftime("%Y/%m/%d") if today else "-"
     vols = []
     for r in rows[hi + 1:]:
         if vi >= len(r):
@@ -51,7 +56,7 @@ def parse_chart(table, today: date | None = None) -> list[float]:
     return vols
 
 
-def fetch_daily(cfg, codes: list[str], bars: int = 61, batch: int = 40, wait: float = 15.0) -> dict:
+def fetch_daily(cfg, codes: list[str], bars: int = 61, batch: int = 40, wait: float = 90.0) -> dict:
     """RssChart を銘柄ごとに横に並べて書き込み、値が出そろったら読む（batch 銘柄ずつ）。"""
     rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
                    else cfg.base_dir / cfg.rss.workbook)
@@ -125,13 +130,17 @@ def main():
         ws = rss._sheet(SHEET)
         ws.Cells.Clear()
         ws.Cells(1, 1).Formula = chart_formula(codes[0], 61, cfg.rss.code_suffix)
-        print(f"{codes[0]} の RssChart を書き込みました。10秒待って先頭を表示します…")
-        time.sleep(10)
-        table = ws.Range(ws.Cells(1, 1), ws.Cells(6, BLOCK)).Value
-        for r in table:
+        print(f"{codes[0]} の RssChart を書き込みました。値が入るまで最大90秒待ちます…")
+        vols, t0 = [], time.time()
+        while time.time() - t0 < 90:
+            time.sleep(5)
+            full = ws.Range(ws.Cells(1, 1), ws.Cells(64, BLOCK)).Value
+            vols = parse_chart(full)
+            print(f"  {time.time() - t0:.0f}秒: {str(full[0][0])[-30:]}  出来高 {len(vols)}日分")
+            if len(vols) >= 20:
+                break
+        for r in ws.Range(ws.Cells(1, 1), ws.Cells(5, BLOCK)).Value:
             print("  ", r)
-        full = ws.Range(ws.Cells(1, 1), ws.Cells(64, BLOCK)).Value
-        vols = parse_chart(full)
         print(f"出来高 {len(vols)}日分を取得" + (f"（平均 {sum(vols) / len(vols):,.0f}株）" if vols else
               "：取れていません。上の表を送ってください"))
         return
