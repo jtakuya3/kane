@@ -94,7 +94,7 @@ class RssConfig:
     universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
     max_scan: int = 600
     # スキャン銘柄で通知するルール（固定銘柄は全ルール）
-    scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14", "R15"])
+    scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14"])
     scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
     # RssMarket の項目名（公式の関数一覧・数式登録エディタの表記に合わせて変更できる）
     items: dict = field(default_factory=lambda: {
