@@ -62,6 +62,7 @@ def parse_chart_rows(table, today: date | None = None) -> list[tuple[str, float]
     return sorted(out)  # 日付順（新しい順で返る場合にそなえる）
 
 
+MIN_DAYS = 5  # 上場まもない銘柄（IPO）も、5日分あれば平均を出す
 BARS = 250  # 約1年分（平均出来高は直近60日、年初来の最大出来高は今年の分から計算）
 
 
@@ -94,7 +95,7 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
                 if c not in pending:
                     continue
                 rows = parse_chart_rows([r[j * BLOCK:(j + 1) * BLOCK] for r in table])
-                if len(rows) >= 20:
+                if len(rows) >= MIN_DAYS:
                     out[c] = rows
                     pending.discard(c)
                     last = time.time()
@@ -205,7 +206,14 @@ def main():
     print(f"{len(codes)}銘柄の日足を取得します…（途中で止めても、取れた分は保存されます）")
     vols = fetch_daily(cfg, codes, batch=args.batch, on_batch=lambda d: write_baseline(out, d))
     write_baseline(out, vols)
+    missing = [c for c in codes if c not in vols]
+    miss_path = cfg.data_dir / "baseline_missing.csv"
+    with open(miss_path, "w", encoding="utf-8", newline="") as f:
+        f.write("code\n" + "".join(f"{c}\n" for c in missing))
     print(f"保存: {out}（{len(vols)}/{len(codes)}銘柄）")
+    if missing:
+        print(f"取れなかった {len(missing)}銘柄: {miss_path}（もう一度実行すると、その銘柄だけ取り直します）"
+              f"\n  例: {' '.join(missing[:15])}")
 
 
 if __name__ == "__main__":
