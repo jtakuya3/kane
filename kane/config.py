@@ -22,35 +22,12 @@ class RuleConfig:
     dtop_pullback: float = 0.02
     dtop_near: float = 0.01
     dtop_vol_ratio: float = 0.5
-    # R5 板の偏り
-    board_weak: float = 0.6
-    board_strong: float = 1.5
-    board_sustain_sec: int = 30
-    # R6 RSI
-    rsi_period: int = 9
-    rsi_arm: float = 90.0
-    rsi_fire: float = 80.0
-    # R7 切り返し
-    rebound_min_drawdown: float = 0.03
-    rebound_window_bars: int = 30
-    rebound_hold_bars: int = 2
-    rebound_dry_ratio: float = 0.5
-    rebound_vol_mult: float = 1.5
-    # R8 1回転反発
-    r8_turnover_low: float = 0.95
-    r8_turnover_high: float = 1.05
-    r8_min_body: float = 0.01
-    r8_vol_mult: float = 2.0
-    r8_expire_bars: int = 3
     # R9 高値ブレイク
     breakout_quiet_bars: int = 10
     breakout_default_vol5m_ratio: float = 0.07  # 浮動株に対する5分出来高の既定割合
     # R10 株価の段階（前日終値比）＋年初来高値更新
     price_step: float = 0.05
     price_step_down: bool = True  # 下落側（−5%, −10%…）も出す
-    # R11 急騰・急落（1分前比）
-    surge_1m: float = 0.02
-    surge_cooldown_sec: int = 180
     # R13 大口板（見えている板より桁違いに大きい板が急に出た）
     wall_mult: float = 10.0  # 周りの板（20本の中央値）の何倍以上か
     wall_min_yen: float = 50_000_000  # 板の金額（値段×数量）がこれ未満なら無視（5,000万円）
@@ -62,7 +39,6 @@ class RuleConfig:
     limit_warn_cooldown_sec: int = 180
     # 共通
     cooldown_sec: int = 600
-    board_cooldown_sec: int = 300
 
 
 @dataclass
@@ -95,7 +71,7 @@ class RssConfig:
     universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
     max_scan: int = 600
     # スキャン銘柄で通知するルール（固定銘柄は全ルール）
-    scan_rules: list = field(default_factory=lambda: ["R10", "R11", "R12", "R14"])
+    scan_rules: list = field(default_factory=lambda: ["R10", "R14"])
     scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
     # RssMarket の項目名（公式の関数一覧・数式登録エディタの表記に合わせて変更できる）
     items: dict = field(default_factory=lambda: {

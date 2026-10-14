@@ -82,5 +82,5 @@ def test_vwap_from_value_when_missing():
 
 def test_feed_color_keys():
     from kane.feed import color_key
-    assert color_key("R13", True) == "important" and color_key("R8", False) == "buy"
+    assert color_key("R13", True) == "important" and color_key("R9", False) == "buy"
     assert color_key("R4", False) == "warn" and color_key("R10", False) == "info"

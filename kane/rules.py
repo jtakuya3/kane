@@ -88,34 +88,6 @@ def r4_double_top(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     return []
 
 
-def r5_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    if not s.buy5 or not s.sell5:  # ストップ高・安や気配なしは対象外
-        st.vars.pop("board_side", None)
-        return []
-    ratio = s.buy5 / s.sell5
-    side = "weak" if ratio <= cfg.board_weak else "strong" if ratio >= cfg.board_strong else None
-    if side != st.vars.get("board_side"):
-        st.vars["board_side"], st.vars["board_since"] = side, s.ts
-        return []
-    if side is None or (s.ts - st.vars["board_since"]).total_seconds() < cfg.board_sustain_sec:
-        return []
-    if not st.cooled(("R5", side), s.ts, cfg.board_cooldown_sec):
-        return []
-    text = "売り優勢" if side == "weak" else "買い板が厚い"
-    return [_alert(st, s.ts, "R5", side, f"板比率{ratio:.2f}（上位5本 買/売）{text}", board_ratio=ratio)]
-
-
-def r8_trigger(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    arm = st.vars.get("r8")
-    if not arm or s.price <= arm["trigger"]:
-        return []
-    st.vars["r8"] = None
-    target = s.vwap
-    return [_alert(st, s.ts, "R8", "BUY",
-                   f"1回転反発の買い：大陰線の高値{_fmt(arm['trigger'])}を上抜け 損切り{_fmt(arm['stop'])} 目標VWAP{_fmt(target)}",
-                   stop=arm["stop"], target=target)]
-
-
 def r9_breakout(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     bars = list(st.bars)
     q = cfg.breakout_quiet_bars
@@ -196,54 +168,7 @@ def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]
     return [_card(st, s, "R10", step or "年初来高値", body, change=chg)]
 
 
-def r11_surge(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    """1分前の株価から±surge_1m以上動いたら急騰／急落。"""
-    hist = st.vars.setdefault("px_hist", deque())
-    hist.append((s.ts, s.price))
-    while len(hist) > 1 and (s.ts - hist[1][0]).total_seconds() >= 60:
-        hist.popleft()
-    t0, p0 = hist[0]
-    if (s.ts - t0).total_seconds() < 60 * 0.9 or not p0:
-        return []  # 1分前のデータがまだ無い
-    m = s.price / p0 - 1
-    if abs(m) < cfg.surge_1m:
-        return []
-    side = "急騰" if m > 0 else "急落"
-    if not st.cooled(("R11", side), s.ts, cfg.surge_cooldown_sec):
-        return []
-    body = [
-        f"{side}株価 {_yen(s.price)}円{_pct_prev(s)}",
-        f"{_vwap_txt(st)}  1分前比 {m:+.2%}".strip(),
-    ]
-    return [_card(st, s, "R11", side, body, change_1m=m)]
-
-
 SPECIAL_SIGN = "0102"  # kabuステーションAPIの気配フラグ：特別気配
-
-
-def r12_special_quote(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    """特別買い気配・特別売り気配（S）に入ったとき。気配が解消したら再通知可能。"""
-    out = []
-    for side, sign, px, qty, name in (
-        ("buy", s.buy1_sign, s.bid, s.buy1_qty, "特別買い気配（S）買い気配"),
-        ("sell", s.sell1_sign, s.ask, s.sell1_qty, "特別売り気配（S）売り気配"),
-    ):
-        key = ("R12", side)
-        on = sign == SPECIAL_SIGN and bool(px)
-        if not on:
-            st.fired.discard(key)
-            continue
-        if not st.once(key):
-            continue
-        amount = f"（約{px * qty / 1e4:,.0f}万円）" if qty else ""
-        qty_txt = f" {qty:,.0f}株{amount}" if qty else ""
-        diff = f"直近約定比 {px / s.price - 1:+.2%}"
-        body = [
-            f"{name} {_yen(px)}円{qty_txt}",
-            f"直近約定 {_yen(s.price)}円{_pct_prev(s)}  {diff}  {_vwap_txt(st)}".rstrip(),
-        ]
-        out.append(_card(st, s, "R12", side, body))
-    return out
 
 
 def _in_continuous_session(ts: datetime) -> bool:
@@ -254,14 +179,15 @@ def _in_continuous_session(ts: datetime) -> bool:
 
 
 def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    """見えている板より桁違いに大きい買い板・売り板が急に出たとき。"""
+    """見えている板より桁違いに大きい買い板・売り板が、直前まで見えていた範囲の中に急に出たとき。"""
     prev = st.vars.get("prev_board")
     cur_buy, cur_sell = s.board_buy or [], s.board_sell or []
     st.vars["prev_board"] = {p: q for p, q in cur_buy + cur_sell}
-    if prev is None or not (cur_buy and cur_sell) or not _in_continuous_session(s.ts):
+    if not prev or not (cur_buy and cur_sell) or not _in_continuous_session(s.ts):
         return []  # 起動直後・寄り前・昼休みは判定しない
     if SPECIAL_SIGN in (s.buy1_sign, s.sell1_sign):
         return []  # 特別気配中は板が偏るのが普通なので除外
+    lo, hi = min(prev), max(prev)  # 直前に見えていた板の値段の範囲
     out = []
     levels = [("買い", p, q) for p, q in cur_buy] + [("売り", p, q) for p, q in cur_sell]
     qtys = sorted(q for _, _, q in levels)
@@ -271,6 +197,8 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
         med = others[len(others) // 2] if others else 0
         if not med or q < med * cfg.wall_mult or p * q < cfg.wall_min_yen:
             continue
+        if not (lo <= p <= hi):
+            continue  # 株価が動いて、前から置いてあった板が見える範囲に入ってきただけ
         if prev.get(p, 0) >= q * cfg.wall_new_ratio:
             continue  # 前からあった板
         if not st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec):
@@ -361,66 +289,7 @@ def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
                    f"高値圏で失速：1分出来高{_fmt(b.volume)}（ピーク{_fmt(peak)}の{b.volume / peak:.0%}）")]
 
 
-def r6_rsi(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
-    r = st.rsi(cfg.rsi_period)
-    if r is None:
-        return []
-    if r > cfg.rsi_arm:
-        st.vars["rsi_armed"] = True
-    elif st.vars.get("rsi_armed") and r < cfg.rsi_fire:
-        st.vars["rsi_armed"] = False
-        return [_alert(st, b.start, "R6", "WARN", f"RSI({cfg.rsi_period})が{cfg.rsi_arm:.0f}超えから{r:.0f}へ反落")]
-    return []
-
-
-def r7_rebound(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
-    bars = list(st.bars)[-cfg.rebound_window_bars:]
-    if len(bars) < cfg.rebound_hold_bars + 4 or not st.peak_bar_vol:
-        return []
-    cur, prev = bars[-1], bars[-2]
-    low_i = min(range(len(bars) - 1), key=lambda i: bars[i].low)  # 現在足を除く安値
-    low = bars[low_i].low
-    hi = st.day_high
-    if not hi or (hi - low) / hi < cfg.rebound_min_drawdown:
-        return []
-    hold = bars[low_i + 1:-1]
-    if len(hold) < cfg.rebound_hold_bars or cur.low < low:  # ① 安値を更新しない足が2本以上
-        return []
-    prior3 = bars[-4:-1]
-    avg3 = sum(x.volume for x in prior3) / 3
-    if avg3 > st.peak_bar_vol * cfg.rebound_dry_ratio:  # ② 売りが枯れている
-        return []
-    if not (cur.close > prev.high and cur.volume >= avg3 * cfg.rebound_vol_mult):  # ③ 出来高を伴う上抜け
-        return []
-    if not st.cooled("R7", b.start, cfg.cooldown_sec):
-        return []
-    return [_alert(st, b.start, "R7", "BUY",
-                   f"切り返し3条件成立：安値{_fmt(low)}を割らず、前足高値{_fmt(prev.high)}を出来高{cur.volume / max(avg3, 1):.1f}倍で上抜け 損切り{_fmt(low)}",
-                   stop=low)]
-
-
-def r8_arm(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
-    arm = st.vars.get("r8")
-    if arm:
-        arm["left"] -= 1
-        if arm["left"] <= 0:
-            st.vars["r8"] = None
-    t = st.turnover
-    if t is None or not (cfg.r8_turnover_low <= t <= cfg.r8_turnover_high):
-        return []
-    prior = list(st.bars)[-11:-1]
-    if len(prior) < 5:
-        return []
-    avg = sum(x.volume for x in prior) / len(prior)
-    body = (b.open - b.close) / b.open if b.open else 0
-    if b.bearish and body >= cfg.r8_min_body and b.volume >= avg * cfg.r8_vol_mult:
-        st.vars["r8"] = {"trigger": b.high, "stop": b.low, "left": cfg.r8_expire_bars}
-        return [_alert(st, b.start, "R8", "ARM",
-                       f"回転率{t:.0%}で大陰線（実体{body:.1%}・出来高{b.volume / max(avg, 1):.1f}倍）→ {_fmt(b.high)}上抜けで買い")]
-    return []
-
-
-SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout, r10_price_step,
-                  r11_surge, r12_special_quote, r13_big_board, r14_stop_high]
-BAR_RULES = [r3_stall, r6_rsi, r7_rebound, r8_arm]
-LIGHT_RULES = [r10_price_step, r11_surge]
+SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r9_breakout, r10_price_step,
+                  r13_big_board, r14_stop_high]
+BAR_RULES = [r3_stall]
+LIGHT_RULES = [r10_price_step]

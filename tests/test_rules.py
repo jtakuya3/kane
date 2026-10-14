@@ -48,14 +48,6 @@ def test_r2_vwap_dev_rearms_after_falling_back():
     assert [x.level for x in rules_of(a, "R2")] == ["5%", "5%"]
 
 
-def test_r5_board_needs_to_persist():
-    e = eng(board_sustain_sec=30)
-    a = run(e, [snap(0, 100, 0, buy5=500, sell5=1000), snap(10, 100, 0, buy5=500, sell5=1000)])
-    assert not rules_of(a, "R5")
-    a = run(e, [snap(31, 100, 0, buy5=500, sell5=1000)])
-    assert rules_of(a, "R5")[0].level == "weak"
-
-
 def test_r4_double_top_on_weak_volume():
     e = eng(float_shares=None)
     s = [snap(0, 1000, 0, high=1000)]
@@ -83,57 +75,6 @@ def test_r9_breakout_with_volume_only():
     s.append(snap(len(prices) * 60, 1060, vol + 60_000))
     a = run(e, s)
     assert len(rules_of(a, "R9")) == 1
-
-
-def test_r8_arm_then_trigger():
-    e = eng(float_shares=100_000)
-    s, vol = [], 0
-    for i in range(10):  # 平常の足（1本あたり1,000株）
-        vol += 1_000
-        s.append(snap(i * 60, 1000, vol))
-    # 回転率95%付近で大陰線
-    s.append(snap(600, 1000, vol + 1_000))
-    s.append(snap(650, 970, 96_000))
-    s.append(snap(660, 975, 96_100))
-    s.append(snap(700, 1001, 96_200))  # 大陰線の高値1000を上抜け
-    a = run(e, s)
-    assert [x.level for x in rules_of(a, "R8")] == ["ARM", "BUY"]
-
-
-def test_r7_rebound_three_conditions():
-    e = eng(float_shares=None)
-    s, vol, t = [], 0, 0
-
-    def bar(o, h, l, c, v):
-        nonlocal vol, t
-        for p, dv in ((o, v // 4), (h, v // 4), (l, v // 4), (c, v - 3 * (v // 4))):
-            vol += dv
-            s.append(snap(t, p, vol))
-            t += 10
-        t = (t // 60 + 1) * 60
-
-    bar(1000, 1100, 1000, 1100, 100_000)  # ピーク出来高
-    for p in (1090, 1070, 1050, 1030):
-        bar(p + 10, p + 10, p, p, 30_000)
-    bar(1030, 1032, 1020, 1025, 10_000)  # 安値1020
-    bar(1025, 1030, 1022, 1028, 10_000)  # 安値を更新しない
-    bar(1028, 1031, 1023, 1029, 10_000)
-    bar(1029, 1045, 1029, 1044, 40_000)  # 前足高値1031を出来高4倍で上抜け
-    s.append(snap(t + 1, 1044, vol))
-    a = run(e, s)
-    assert len(rules_of(a, "R7")) == 1
-
-
-def test_r6_rsi_reversal():
-    e = eng(float_shares=None)
-    s, vol = [], 0
-    prices = [1000 + i * 10 for i in range(15)] + [1120, 1100, 1080]
-    for i, p in enumerate(prices):
-        vol += 1_000
-        s.append(snap(i * 60, p, vol))
-    s.append(snap(len(prices) * 60, 1080, vol))
-    a = run(e, s)
-    assert len(rules_of(a, "R6")) == 1
 
 
 def test_recorder_and_replay_roundtrip(tmp_path):
@@ -164,37 +105,6 @@ def test_r10_price_step_and_ytd_high():
         "4382ＨＥＲＯＺ時価総額 261億円",
         "年初来高値更新株価 1468円 前日比 +70円（+5.01%）",
         "直前基準 1398円比 +5.01%  5%段階",
-    ]
-
-
-def test_r11_surge_1m():
-    e = Engine([SymbolInfo("3907", "シリコンスタジオ", None, issued_shares=2_956_500)], RuleConfig())
-
-    def s(sec, price, vwap):
-        return Snapshot(T0.replace(hour=9, minute=59) + timedelta(seconds=sec), "3907", price, 0,
-                        vwap=vwap, prev_close=1570)
-
-    a = run(e, [s(0, 1680, 1640), s(30, 1700, 1645), s(62, 1725, 1646.4), s(70, 1730, 1647)])
-    r11 = rules_of(a, "R11")
-    assert len(r11) == 1
-    assert r11[0].message.splitlines()[2:4] == ["急騰株価 1725円（+9.87%）", "VWAP比 +4.77%  1分前比 +2.68%"]
-
-
-def test_r12_special_buy_quote():
-    e = Engine([SymbolInfo("3909", "ショーケース", None, issued_shares=10_185_600)], RuleConfig())
-
-    def s(sec, sign):
-        return Snapshot(T0.replace(minute=3) + timedelta(seconds=sec), "3909", 549, 0, vwap=530.85,
-                        prev_close=469, bid=549, buy1_qty=14_300, buy1_sign=sign)
-
-    a = run(e, [s(3, "0102"), s(4, "0102"), s(5, "0101"), s(6, "0102")])
-    r12 = rules_of(a, "R12")
-    assert len(r12) == 2
-    assert r12[0].message.splitlines() == [
-        "09:03:03",
-        "3909ショーケース時価総額 56億円",
-        "特別買い気配（S）買い気配 549円 14,300株（約785万円）",
-        "直近約定 549円（+17.06%）  直近約定比 +0.00%  VWAP比 +3.42%",
     ]
 
 
@@ -272,3 +182,13 @@ def test_r13_default_requires_50m_yen():
     wall_sell[4] = (2005, 30_000)  # 別の値段に約6,015万円 → 出る
     a = run(e, [board_snap(2, NORMAL_BUY, wall_sell)])
     assert len(rules_of(a, "R13")) == 1
+
+
+def test_r13_ignores_wall_scrolling_into_view():
+    """株価が動いて、前からあった大口板が見える範囲に入ってきただけなら通知しない。"""
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
+    # 売り板を2円上にずらす：前の範囲(1991〜2010)の外にある2011円の3万株が新たに見える
+    shifted_sell = [(2003 + i, 1500 + i * 100) for i in range(9)] + [(2011, 30_000)]
+    shifted_buy = [(2002 - i, 1000 + i * 100) for i in range(10)]
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, shifted_buy, shifted_sell, 2002)])
+    assert not rules_of(a, "R13")

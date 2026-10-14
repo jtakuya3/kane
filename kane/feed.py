@@ -15,12 +15,12 @@ log = logging.getLogger("kane")
 # ルール → (背景色, 文字色)
 COLORS = {
     "important": ("#c62828", "#ffffff"),  # 大口板・ストップ高など popup_rules
-    "buy": ("#1b5e20", "#ffffff"),  # R7 切り返し / R8 反発 / R9 ブレイク
-    "warn": ("#e65100", "#ffffff"),  # R3 失速 / R4 ダブルトップ / R6 RSI
+    "buy": ("#1b5e20", "#ffffff"),  # R9 高値ブレイク
+    "warn": ("#e65100", "#ffffff"),  # R2 VWAP乖離 / R3 失速 / R4 ダブルトップ
     "info": ("#1e1e1e", "#e0e0e0"),
 }
-BUY_RULES = {"R7", "R8", "R9"}
-WARN_RULES = {"R2", "R3", "R4", "R6"}
+BUY_RULES = {"R9"}
+WARN_RULES = {"R2", "R3", "R4"}
 
 
 def color_key(rule: str, important: bool) -> str:
