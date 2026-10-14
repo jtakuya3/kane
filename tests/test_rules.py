@@ -208,7 +208,7 @@ NORMAL_SELL = [(2001 + i, 1500 + i * 100) for i in range(10)]
 
 
 def test_r13_big_board_appears():
-    e = eng(float_shares=None)
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
     wall_sell = list(NORMAL_SELL)
     wall_sell[3] = (2004, 30_000)  # 急に3万株の売り板
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell),
@@ -219,7 +219,7 @@ def test_r13_big_board_appears():
 
 
 def test_r13_ignores_existing_wall_and_startup_and_small_amount():
-    e = eng(float_shares=None)
+    e = eng(float_shares=None, wall_min_yen=3_000_000)
     wall_buy = list(NORMAL_BUY)
     wall_buy[2] = (1998, 30_000)
     a = run(e, [board_snap(0, wall_buy, NORMAL_SELL), board_snap(1, wall_buy, NORMAL_SELL)])
@@ -227,7 +227,7 @@ def test_r13_ignores_existing_wall_and_startup_and_small_amount():
     cheap = [(p / 20, q) for p, q in NORMAL_BUY]
     cheap_wall = list(cheap)
     cheap_wall[1] = (cheap[1][0], 30_000)  # 100円×3万株=300万円未満
-    e2 = eng(float_shares=None)
+    e2 = eng(float_shares=None, wall_min_yen=3_000_000)
     a = run(e2, [board_snap(0, cheap, NORMAL_SELL, 100), board_snap(1, cheap_wall, NORMAL_SELL, 100)])
     assert not rules_of(a, "R13")
 
@@ -261,3 +261,14 @@ def test_r14_stop_high_lifecycle():
 def test_upper_limit_table():
     from kane.rules import upper_limit
     assert upper_limit(469) == 549 and upper_limit(1398) == 1698 and upper_limit(99) == 129
+
+
+def test_r13_default_requires_50m_yen():
+    e = eng(float_shares=None)
+    wall_sell = list(NORMAL_SELL)
+    wall_sell[3] = (2004, 20_000)  # 約4,008万円 → 出ない
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell)])
+    assert not rules_of(a, "R13")
+    wall_sell[3] = (2004, 30_000)  # 約6,012万円 → 出る
+    a = run(e, [board_snap(2, NORMAL_BUY, wall_sell)])
+    assert len(rules_of(a, "R13")) == 1

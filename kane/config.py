@@ -53,7 +53,7 @@ class RuleConfig:
     surge_cooldown_sec: int = 180
     # R13 大口板（見えている板より桁違いに大きい板が急に出た）
     wall_mult: float = 10.0  # 周りの板（20本の中央値）の何倍以上か
-    wall_min_yen: float = 3_000_000  # 金額がこれ未満なら無視（低位株のノイズ除け）
+    wall_min_yen: float = 50_000_000  # 板の金額（値段×数量）がこれ未満なら無視（5,000万円）
     wall_new_ratio: float = 0.5  # 直前の同じ値段の板がこの割合未満だった＝急に出た
     wall_cooldown_sec: int = 300
     # R14 ストップ高の剥がれ

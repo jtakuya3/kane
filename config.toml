@@ -36,6 +36,8 @@ turnover_levels = [0.4, 0.9]   # 50%・100%だと出遅れるので早めに
 vwap_dev_levels = [0.05, 0.08, 0.10]
 board_weak = 0.6
 board_strong = 1.5
+wall_min_yen = 50000000   # 大口板（R13）は金額5,000万円以上だけ通知
+wall_mult = 10.0          # かつ、周りの板（20本の中央値）の10倍以上
 price_step = 0.05
 surge_1m = 0.02
 
