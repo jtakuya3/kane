@@ -80,7 +80,7 @@ class Monitor:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.client = KabuClient(cfg.base_url, cfg.password_file)
-        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep)
+        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
         self.engine = Engine(cfg.symbols, cfg.rules, on_bar=self.recorder.bar)
         self.start, self.end = _hm(cfg.session_start), _hm(cfg.session_end)
@@ -111,7 +111,7 @@ class Monitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            await asyncio.to_thread(self.notifier.send, a.message, pop)
+            await asyncio.to_thread(self.notifier.send, a.message, pop, a.rule)
 
     async def wait_session(self):
         while True:

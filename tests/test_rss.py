@@ -59,7 +59,7 @@ def test_rss_monitor_scan_filter(tmp_path):
     (tmp_path / "universe.csv").write_text("code,name\n9999,スキャン株\n4498,重複\n", encoding="utf-8")
     cfg = Config("", "", None, None, False, False, tmp_path,
                  [SymbolInfo("4498", "サイバートラスト", 7_285_800)], "08:55", "15:35", False, RuleConfig(),
-                 source="rss", base_dir=tmp_path)
+                 source="rss", base_dir=tmp_path, feed=False)
     m = RssMonitor(cfg)
     assert [s.code for s in m.scan] == ["9999"]  # 固定銘柄は除外
     sent = []
@@ -78,3 +78,9 @@ def test_vwap_from_value_when_missing():
     vals = {"price": 2066, "volume": 1000, "vwap": "", "value": 2_000}  # 千円
     snap, _ = row_to_snapshot("4498", wf, [vals.get(k, "") for k, _ in wf], TS, [])
     assert snap.vwap == 2000
+
+
+def test_feed_color_keys():
+    from kane.feed import color_key
+    assert color_key("R13", True) == "important" and color_key("R8", False) == "buy"
+    assert color_key("R4", False) == "warn" and color_key("R10", False) == "info"

@@ -15,7 +15,9 @@ webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"
 
 [notify]
 beep = false   # true にするとWindowsの通知音も鳴らす
-popup_rules = ["R13", "R14:剥がれ", "R14:警戒"]   # 画面にポップアップも出す（ルール名 or ルール名:レベル）
+feed = true     # 画面右上のアラート窓（最前面）に全通知を流す
+popup_rules = ["R13", "R14:剥がれ", "R14:警戒"]   # アラート窓で赤く強調＋音（ルール名 or ルール名:レベル）
+dialog = false  # true にすると popup_rules の通知でメッセージボックスも出す（フォーカスを奪うので注意）
 
 [paths]
 symbols_csv = "symbols.csv"

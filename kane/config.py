@@ -136,6 +136,8 @@ class Config:
     record_snapshots: bool
     rules: RuleConfig
     popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
+    feed: bool = True  # 画面のアラート窓に全通知を流す
+    dialog: bool = False  # popup_rules の通知でメッセージボックスも出す
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)
@@ -201,6 +203,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
         record_snapshots=raw.get("record", {}).get("snapshots", True),
         rules=rules,
         popup_rules=raw.get("notify", {}).get("popup_rules", ["R13", "R14:剥がれ", "R14:警戒"]),
+        feed=raw.get("notify", {}).get("feed", True),
+        dialog=raw.get("notify", {}).get("dialog", False),
         scanner=scanner,
         source=raw.get("source", {}).get("type", "kabu"),
         rss=_rss_config(raw.get("rss", {})),

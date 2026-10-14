@@ -29,7 +29,7 @@ class RssMonitor:
         r = cfg.rss
         wb = Path(r.workbook)
         self.rss = ExcelRss(r, wb if wb.is_absolute() else cfg.base_dir / wb)
-        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep)
+        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
         self.watch = list(cfg.symbols)
         self.pinned = {s.code for s in self.watch}
@@ -52,6 +52,8 @@ class RssMonitor:
                  len(self.watch), len(self.wf), len(self.scan), len(self.sf))
 
     def check(self, wait_sec: float = 8):
+        if self.notifier.feed:
+            self.notifier.send("kane アラート窓のテスト表示（監視中はここに通知が流れます）", True, "R13")
         self.setup_sheets()
         print(f"RSSの式を書き込みました。{wait_sec:.0f}秒待って値を読みます…")
         time.sleep(wait_sec)
@@ -91,7 +93,7 @@ class RssMonitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            self.pool.submit(self.notifier.send, a.message, pop)
+            self.pool.submit(self.notifier.send, a.message, pop, a.rule)
 
     # ---- 1回分の読み取り ----
     def poll(self):

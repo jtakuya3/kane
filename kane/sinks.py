@@ -53,15 +53,25 @@ def decode_board(s: str | None):
 
 
 class Notifier:
-    def __init__(self, webhook_file: Path | None, enabled: bool, beep: bool):
+    def __init__(self, webhook_file: Path | None, enabled: bool, beep: bool,
+                 feed: bool = False, dialog: bool = False):
         self.url = None
         if enabled and webhook_file and webhook_file.exists():
             self.url = webhook_file.read_text(encoding="utf-8").strip() or None
         self.beep = beep
+        self.dialog = dialog
+        self.feed = None
+        if feed:
+            from .feed import AlertFeed
 
-    def send(self, text: str, popup: bool = False):
+            self.feed = AlertFeed()
+
+    def send(self, text: str, popup: bool = False, rule: str = ""):
+        """popup=True は重要な通知（アラート窓で赤く強調、dialog 設定時はメッセージボックスも）。"""
         print(f"{datetime.now():%H:%M:%S} {text}", flush=True)
-        if popup:
+        if self.feed:
+            self.feed.push(text, rule, popup)
+        if popup and self.dialog:
             _popup(text)
         if self.beep:
             try:
