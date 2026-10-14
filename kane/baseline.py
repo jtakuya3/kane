@@ -66,7 +66,7 @@ BARS = 250  # 約1年分（平均出来高は直近60日、年初来の最大出
 
 
 def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: float = 90.0,
-                on_batch=None) -> dict:
+                on_batch=None, stall: float = 15.0) -> dict:
     """RssChart を銘柄ごとに横に並べて書き込み、値が出そろったら読む（batch 銘柄ずつ）。
     Excelが計算中で呼び出しを拒否したときは待ってやり直す。on_batch(out) で途中経過を保存できる。"""
     rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
@@ -82,9 +82,11 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
             def put(j=j, c=c):
                 ws.Cells(1, 1 + j * BLOCK).Formula = chart_formula(c, bars, cfg.rss.code_suffix)
             com_retry(put)
-        t0 = time.time()
+        t0 = last = time.time()
         pending = set(part)
         while pending and time.time() - t0 < wait:
+            if len(pending) < len(part) and time.time() - last > stall:
+                break  # 他の銘柄は取れたのに、残りが stall 秒届かない（上場廃止・コード違いなど）→ 先へ進む
             time.sleep(1.0)
             # 1回でまとめて読む（Excelへの呼び出し回数を減らす）
             table = com_retry(lambda: ws.Range(ws.Cells(1, 1), ws.Cells(bars + 3, len(part) * BLOCK)).Value)
@@ -95,6 +97,7 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
                 if len(rows) >= 20:
                     out[c] = rows
                     pending.discard(c)
+                    last = time.time()
         done = min(k + batch, len(codes))
         el = time.time() - t_all
         print(f"  {done}/{len(codes)} 銘柄（この回で取れなかった {len(pending)}銘柄）"
@@ -140,6 +143,8 @@ def main():
     ap.add_argument("paths", nargs="*")
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--force", action="store_true", help="今日すでに取れた銘柄も取り直す")
+    ap.add_argument("--batch", type=int, default=40, help="一度に書き込む RssChart の数")
     args = ap.parse_args()
     cfg = load_config(args.config)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
@@ -190,9 +195,15 @@ def main():
         else:
             print("出来高 0日分：取れていません。上の表を送ってください")
         return
-    print(f"{len(codes)}銘柄の日足を取得します…（途中で止めても、取れた分は保存されます）")
     out = cfg.data_dir / "baseline.csv"
-    vols = fetch_daily(cfg, codes, on_batch=lambda d: write_baseline(out, d))
+    if not args.force and out.exists():
+        with open(out, encoding="utf-8-sig", newline="") as f:
+            today = {r["code"] for r in csv.DictReader(f) if r.get("updated") == date.today().isoformat()}
+        if today:
+            print(f"今日すでに取れた {len(today)}銘柄は飛ばします（取り直すときは --force）")
+        codes = [c for c in codes if c not in today]
+    print(f"{len(codes)}銘柄の日足を取得します…（途中で止めても、取れた分は保存されます）")
+    vols = fetch_daily(cfg, codes, batch=args.batch, on_batch=lambda d: write_baseline(out, d))
     write_baseline(out, vols)
     print(f"保存: {out}（{len(vols)}/{len(codes)}銘柄）")
 
