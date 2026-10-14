@@ -73,3 +73,14 @@ def test_evaluate_direction_and_returns():
     assert round(rows[0]["ret5"], 4) == -0.04  # 10:05時点で確定済みの最後の足（10:04開始）の終値96
     s = summarize(rows)[0]
     assert s["avg5"] > 0  # 下落を期待して下がったのでプラス
+
+
+def test_min1_agg_format(tmp_path):
+    df = pd.DataFrame({"code": ["13570", "153A0"], "d": [20260310, 20260310], "min1": [549, 562],
+                       "n": [349, 10], "pv": [2_249_658_000.0, 3_000_000.0], "vv": [470108.0, 1000.0]})
+    p = tmp_path / "min1_0304.parquet"
+    df.to_parquet(p)
+    bars = load_bars([str(p)], "bars", {})
+    assert list(bars["code"]) == ["1357", "153A"]
+    assert str(bars["dt"].iloc[0]) == "2026-03-10 09:09:00"
+    assert round(bars["close"].iloc[0], 1) == round(2_249_658_000 / 470108, 1)

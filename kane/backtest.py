@@ -88,6 +88,20 @@ def _datetime(df, m):
     return s
 
 
+def _from_min1_agg(df):
+    """_backtest_data の min1*.parquet 形式：code(5桁), d(YYYYMMDD), min1(0時からの分),
+    n(約定回数), pv(売買代金), vv(出来高)。四本値が無いので1分ごとのVWAP（pv÷vv）を株価として使う。"""
+    import pandas as pd
+
+    code = df["code"].astype(str).str.strip()
+    code = code.where(code.str.len() != 5, code.str[:4])  # 5桁コードの末尾（チェック桁）を落とす
+    dt = pd.to_datetime(df["d"].astype(str), format="%Y%m%d") + pd.to_timedelta(df["min1"], unit="m")
+    px = df["pv"] / df["vv"]
+    f = pd.DataFrame({"code": code, "dt": dt, "open": px, "high": px, "low": px, "close": px,
+                      "volume": df["vv"]})
+    return f[(df["vv"] > 0)].dropna(subset=["close"])
+
+
 def load_bars(paths: list[str], kind: str, override: dict):
     """1分足の DataFrame（code, dt, open, high, low, close, volume）にそろえる。"""
     import pandas as pd
@@ -95,6 +109,10 @@ def load_bars(paths: list[str], kind: str, override: dict):
     frames = []
     for p in paths:
         df = _read(p)
+        if {"code", "d", "min1", "pv", "vv"} <= set(df.columns) and not override:
+            frames.append(_from_min1_agg(df))
+            print(f"読み込み {Path(p).name}: {len(frames[-1]):,}本（1分集計形式）")
+            continue
         m = detect(list(df.columns), kind, override)
         dt = _datetime(df, m)
         code = df[m["code"]].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
