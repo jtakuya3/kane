@@ -269,6 +269,6 @@ def test_r13_default_requires_50m_yen():
     wall_sell[3] = (2004, 20_000)  # 約4,008万円 → 出ない
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell)])
     assert not rules_of(a, "R13")
-    wall_sell[3] = (2004, 30_000)  # 約6,012万円 → 出る
+    wall_sell[4] = (2005, 30_000)  # 別の値段に約6,015万円 → 出る
     a = run(e, [board_snap(2, NORMAL_BUY, wall_sell)])
     assert len(rules_of(a, "R13")) == 1
