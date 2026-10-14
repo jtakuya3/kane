@@ -81,6 +81,15 @@ def _qty_sum(msg: dict, side: str, n: int = 5) -> float | None:
     return total if seen else None
 
 
+def _levels(msg: dict, side: str, n: int = 10) -> list:
+    out = []
+    for i in range(1, n + 1):
+        lv = msg.get(f"{side}{i}") or {}
+        if lv.get("Price") and lv.get("Qty"):
+            out.append((float(lv["Price"]), float(lv["Qty"])))
+    return out
+
+
 def parse_push(msg: dict, ts: datetime | None = None) -> Snapshot | None:
     """PUSH配信（/board と同じ形式）を Snapshot に変換する。"""
     price = msg.get("CurrentPrice")
@@ -106,4 +115,6 @@ def parse_push(msg: dict, ts: datetime | None = None) -> Snapshot | None:
         sell1_qty=sell1.get("Qty") or None,
         buy1_sign=buy1.get("Sign") or None,
         sell1_sign=sell1.get("Sign") or None,
+        board_buy=_levels(msg, "Buy"),
+        board_sell=_levels(msg, "Sell"),
     )

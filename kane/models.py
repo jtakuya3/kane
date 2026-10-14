@@ -26,6 +26,9 @@ class Snapshot:
     sell1_qty: float | None = None
     buy1_sign: str | None = None  # 気配フラグ（"0102"=特別気配）
     sell1_sign: str | None = None
+    # 板10本ずつ [(値段, 数量), ...]（最良気配から順）
+    board_buy: list | None = None
+    board_sell: list | None = None
 
 
 @dataclass

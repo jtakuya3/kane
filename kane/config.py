@@ -10,7 +10,7 @@ from pathlib import Path
 @dataclass
 class RuleConfig:
     # R1 浮動株回転率
-    turnover_levels: list[float] = field(default_factory=lambda: [0.5, 0.8, 0.95])
+    turnover_levels: list[float] = field(default_factory=lambda: [0.4, 0.9])
     # R2 VWAP乖離
     vwap_dev_levels: list[float] = field(default_factory=lambda: [0.05, 0.08, 0.10])
     vwap_dev_rearm: float = 0.02  # 閾値からこれだけ下がったら再通知可能
@@ -51,6 +51,11 @@ class RuleConfig:
     # R11 急騰・急落（1分前比）
     surge_1m: float = 0.02
     surge_cooldown_sec: int = 180
+    # R13 大口板（見えている板より桁違いに大きい板が急に出た）
+    wall_mult: float = 10.0  # 周りの板（20本の中央値）の何倍以上か
+    wall_min_yen: float = 3_000_000  # 金額がこれ未満なら無視（低位株のノイズ除け）
+    wall_new_ratio: float = 0.5  # 直前の同じ値段の板がこの割合未満だった＝急に出た
+    wall_cooldown_sec: int = 300
     # 共通
     cooldown_sec: int = 600
     board_cooldown_sec: int = 300
@@ -100,6 +105,7 @@ class Config:
     session_end: str
     record_snapshots: bool
     rules: RuleConfig
+    popup_rules: list = field(default_factory=lambda: ["R13"])
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
 
@@ -161,5 +167,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
         session_end=session.get("end", "15:35"),
         record_snapshots=raw.get("record", {}).get("snapshots", True),
         rules=rules,
+        popup_rules=raw.get("notify", {}).get("popup_rules", ["R13"]),
         scanner=scanner,
     )

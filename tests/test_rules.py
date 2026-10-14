@@ -37,8 +37,8 @@ def test_bars_built_from_cumulative_volume():
 
 def test_r1_turnover_fires_once_per_level():
     e = eng()
-    a = run(e, [snap(0, 100, 0), snap(1, 100, 500_000), snap(2, 100, 600_000), snap(3, 100, 960_000)])
-    assert [x.level for x in rules_of(a, "R1")] == ["50%", "80%", "95%"]
+    a = run(e, [snap(0, 100, 0), snap(1, 100, 400_000), snap(2, 100, 600_000), snap(3, 100, 910_000)])
+    assert [x.level for x in rules_of(a, "R1")] == ["40%", "90%"]
 
 
 def test_r2_vwap_dev_rearms_after_falling_back():
@@ -148,7 +148,7 @@ def test_recorder_and_replay_roundtrip(tmp_path):
     cfg = Config("", "", tmp_path, None, False, False, tmp_path,
                  [SymbolInfo("TEST", "テスト", 1_000_000, None)], "08:55", "15:35", True, RuleConfig())
     alerts = replay(cfg, tmp_path / "snapshots_20261015.csv")
-    assert [a.level for a in alerts if a.rule == "R1"] == ["50%", "80%"]
+    assert [a.level for a in alerts if a.rule == "R1"] == ["40%", "90%"]
 
 
 def test_r10_price_step_and_ytd_high():
@@ -196,3 +196,42 @@ def test_r12_special_buy_quote():
         "特別買い気配（S）買い気配 549円 14,300株（約785万円）",
         "直近約定 549円（+17.06%）  直近約定比 +0.00%  VWAP比 +3.42%",
     ]
+
+
+def board_snap(sec, buy, sell, price=2000):
+    return Snapshot(T0.replace(minute=5) + timedelta(seconds=sec), "TEST", price, 0,
+                    board_buy=buy, board_sell=sell)
+
+
+NORMAL_BUY = [(2000 - i, 1000 + i * 100) for i in range(10)]
+NORMAL_SELL = [(2001 + i, 1500 + i * 100) for i in range(10)]
+
+
+def test_r13_big_board_appears():
+    e = eng(float_shares=None)
+    wall_sell = list(NORMAL_SELL)
+    wall_sell[3] = (2004, 30_000)  # 急に3万株の売り板
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, NORMAL_BUY, wall_sell),
+                board_snap(2, NORMAL_BUY, wall_sell)])
+    r13 = rules_of(a, "R13")
+    assert len(r13) == 1 and r13[0].level == "売り"
+    assert "大口売り板 2004円 30,000株（約6,012万円）" in r13[0].message
+
+
+def test_r13_ignores_existing_wall_and_startup_and_small_amount():
+    e = eng(float_shares=None)
+    wall_buy = list(NORMAL_BUY)
+    wall_buy[2] = (1998, 30_000)
+    a = run(e, [board_snap(0, wall_buy, NORMAL_SELL), board_snap(1, wall_buy, NORMAL_SELL)])
+    assert not rules_of(a, "R13")  # 起動時からあった板
+    cheap = [(p / 20, q) for p, q in NORMAL_BUY]
+    cheap_wall = list(cheap)
+    cheap_wall[1] = (cheap[1][0], 30_000)  # 100円×3万株=300万円未満
+    e2 = eng(float_shares=None)
+    a = run(e2, [board_snap(0, cheap, NORMAL_SELL, 100), board_snap(1, cheap_wall, NORMAL_SELL, 100)])
+    assert not rules_of(a, "R13")
+
+
+def test_board_roundtrip_encoding():
+    from kane.sinks import decode_board, encode_board
+    assert decode_board(encode_board([(2000.0, 100.0)], [(2001.5, 300.0)])) == ([(2000.0, 100.0)], [(2001.5, 300.0)])

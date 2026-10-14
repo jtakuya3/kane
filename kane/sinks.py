@@ -14,9 +14,42 @@ log = logging.getLogger("kane")
 
 SNAP_COLS = ["ts", "symbol", "price", "volume", "vwap", "high", "low", "open",
              "prev_close", "buy5", "sell5", "bid", "ask",
-             "buy1_qty", "sell1_qty", "buy1_sign", "sell1_sign"]
+             "buy1_qty", "sell1_qty", "buy1_sign", "sell1_sign", "board"]
 BAR_COLS = ["start", "symbol", "open", "high", "low", "close", "volume", "turnover", "vwap"]
 ALERT_COLS = ["ts", "symbol", "rule", "level", "price", "turnover", "vwap_dev", "message"]
+
+
+def _popup(text: str):
+    """Windowsの最前面メッセージボックス（別スレッドなので監視は止まらない）。"""
+    try:
+        import ctypes
+        import threading
+
+        MB_TOPMOST, MB_SETFOREGROUND, MB_ICONINFO = 0x40000, 0x10000, 0x40
+        threading.Thread(
+            target=ctypes.windll.user32.MessageBoxW,
+            args=(0, text, "kane", MB_TOPMOST | MB_SETFOREGROUND | MB_ICONINFO),
+            daemon=True,
+        ).start()
+    except Exception:
+        pass  # Windows以外では何もしない
+
+
+def encode_board(buy, sell) -> str:
+    """板を "値段:数量;…|値段:数量;…"（買い|売り）の文字列にする。"""
+    if buy is None and sell is None:
+        return ""
+    f = lambda lv: ";".join(f"{p:g}:{q:g}" for p, q in (lv or []))
+    return f"{f(buy)}|{f(sell)}"
+
+
+def decode_board(s: str | None):
+    if not s or "|" not in s:
+        return None, None
+    def g(part):
+        return [tuple(float(x) for x in kv.split(":")) for kv in part.split(";") if kv]
+    b, a = s.split("|", 1)
+    return g(b), g(a)
 
 
 class Notifier:
@@ -26,8 +59,10 @@ class Notifier:
             self.url = webhook_file.read_text(encoding="utf-8").strip() or None
         self.beep = beep
 
-    def send(self, text: str):
+    def send(self, text: str, popup: bool = False):
         print(f"{datetime.now():%H:%M:%S} {text}", flush=True)
+        if popup:
+            _popup(text)
         if self.beep:
             try:
                 import winsound
@@ -82,7 +117,8 @@ class Recorder:
 
     def snapshot(self, s: Snapshot):
         if self.snaps:
-            row = {c: getattr(s, c) for c in SNAP_COLS}
+            row = {c: getattr(s, c) for c in SNAP_COLS if c != "board"}
+            row["board"] = encode_board(s.board_buy, s.board_sell)
             row["ts"] = s.ts.isoformat(timespec="milliseconds")
             self.snaps.write(s.ts, row)
 
@@ -122,4 +158,5 @@ def read_snapshots(path: Path):
                 sell5=f(r["sell5"]), bid=f(r["bid"]), ask=f(r["ask"]),
                 buy1_qty=f(r.get("buy1_qty")), sell1_qty=f(r.get("sell1_qty")),
                 buy1_sign=t(r.get("buy1_sign")), sell1_sign=t(r.get("sell1_sign")),
+                board_buy=decode_board(r.get("board"))[0], board_sell=decode_board(r.get("board"))[1],
             )

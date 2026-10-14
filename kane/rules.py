@@ -12,7 +12,12 @@ from .config import RuleConfig
 from .models import Alert, Bar, Snapshot
 from .state import SymbolState
 
-R1_LABEL = {0.5: "天井警戒", 0.8: "急落警戒", 0.95: "底候補（1回転）"}
+def r1_label(lv: float) -> str:
+    if lv < 0.6:
+        return "天井警戒"
+    if lv < 0.85:
+        return "急落警戒"
+    return "底候補（1回転手前）"
 R2_LABEL = {0.05: "伸び切り", 0.08: "過熱", 0.10: "過熱+"}
 
 
@@ -40,7 +45,7 @@ def r1_turnover(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     out = []
     for lv in cfg.turnover_levels:
         if t >= lv and st.once(("R1", lv)):
-            label = R1_LABEL.get(lv, "")
+            label = r1_label(lv)
             out.append(_alert(st, s.ts, "R1", f"{lv:.0%}", f"浮動株回転率{lv:.0%}到達 {label}"))
     return out
 
@@ -241,6 +246,44 @@ def r12_special_quote(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Ale
     return out
 
 
+def _in_continuous_session(ts: datetime) -> bool:
+    t = ts.time()
+    return (t >= t.replace(hour=9, minute=0, second=0, microsecond=0)
+            and not (t.replace(hour=11, minute=30, second=0, microsecond=0) <= t
+                     < t.replace(hour=12, minute=30, second=0, microsecond=0)))
+
+
+def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """見えている板より桁違いに大きい買い板・売り板が急に出たとき。"""
+    prev = st.vars.get("prev_board")
+    cur_buy, cur_sell = s.board_buy or [], s.board_sell or []
+    st.vars["prev_board"] = {p: q for p, q in cur_buy + cur_sell}
+    if prev is None or not (cur_buy and cur_sell) or not _in_continuous_session(s.ts):
+        return []  # 起動直後・寄り前・昼休みは判定しない
+    if SPECIAL_SIGN in (s.buy1_sign, s.sell1_sign):
+        return []  # 特別気配中は板が偏るのが普通なので除外
+    out = []
+    levels = [("買い", p, q) for p, q in cur_buy] + [("売り", p, q) for p, q in cur_sell]
+    qtys = sorted(q for _, _, q in levels)
+    for side, p, q in levels:
+        others = list(qtys)
+        others.remove(q)
+        med = others[len(others) // 2] if others else 0
+        if not med or q < med * cfg.wall_mult or p * q < cfg.wall_min_yen:
+            continue
+        if prev.get(p, 0) >= q * cfg.wall_new_ratio:
+            continue  # 前からあった板
+        if not st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec):
+            continue
+        dist = p / s.price - 1
+        body = [
+            f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）",
+            f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{dist:+.2%}",
+        ]
+        out.append(_card(st, s, "R13", side, body, wall_price=p, wall_qty=q, wall_mult=q / med))
+    return out
+
+
 # ---------------- 1分足確定系 ----------------
 
 def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
@@ -319,6 +362,6 @@ def r8_arm(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
 
 
 SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout, r10_price_step,
-                  r11_surge, r12_special_quote]
+                  r11_surge, r12_special_quote, r13_big_board]
 BAR_RULES = [r3_stall, r6_rsi, r7_rebound, r8_arm]
 LIGHT_RULES = [r10_price_step, r11_surge]

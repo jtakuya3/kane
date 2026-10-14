@@ -87,7 +87,7 @@ class Monitor:
         for a in alerts:
             self.count += 1
             self.recorder.alert(a)
-            await asyncio.to_thread(self.notifier.send, a.message)
+            await asyncio.to_thread(self.notifier.send, a.message, a.rule in self.cfg.popup_rules)
 
     async def wait_session(self):
         while True:
