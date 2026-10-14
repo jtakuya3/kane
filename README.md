@@ -31,6 +31,14 @@ R10〜R12 は時刻・銘柄・時価総額の見出し付きの複数行で通�
 閾値は `config.toml` の `[rules]` で上書きできる（項目名は `kane/config.py` の `RuleConfig`）。
 浮動株と R9 の5分出来高閾値は `symbols.csv`（`breakout_vol5m` が空なら浮動株の7%）。
 
+## 監視銘柄（固定＋ランキング）
+- `symbols.csv` の銘柄は**固定**で常にPUSH登録する。`group` 列（security / ipo など）は開始通知の表示用。
+- 残りの枠（50 − 固定数）は、kabuのランキングAPI（値上がり率・売買高急増・売買代金急増・TICK回数など、
+  `[scanner] rankings`）を10秒ごとに巡回して、順位を点数化した上位で自動的に埋める。
+  一度入れた銘柄は最低10分は外さない。
+- PUSH枠に入っていないランキング銘柄も、ランキングの株価で R10（段階）・R11（急騰・急落）を判定する
+  （起動直後の1回目は現在の段階を覚えるだけで通知しない）。
+
 ## セットアップ（Windows）
 1. `git clone` / `git pull` して、このフォルダで `py -3.11 -m pip install -r requirements.txt`
 2. `config.toml` のパスを確認（APIパスワード・Slack Webhookは既存の Downloads のファイルを読む）

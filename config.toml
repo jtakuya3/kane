@@ -30,3 +30,15 @@ board_weak = 0.6
 board_strong = 1.5
 price_step = 0.05
 surge_1m = 0.02
+
+# ランキングで全市場から動いている銘柄を拾い、PUSH 50枠の残りを自動で入れ替える
+# （symbols.csv の銘柄は固定で常に登録）
+[scanner]
+enabled = true
+interval_sec = 10
+max_push = 50
+min_hold_sec = 600
+light_alerts = true
+# [種類, 市場]  種類 1値上がり率 2値下がり率 3売買高 4売買代金 5TICK回数 6売買高急増 7売買代金急増
+#               市場 ALL 全市場 / TP プライム / TS スタンダード / TG グロース
+rankings = [[1, "ALL"], [6, "ALL"], [7, "ALL"], [5, "ALL"], [1, "TG"], [1, "TS"], [2, "ALL"]]

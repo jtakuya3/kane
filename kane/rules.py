@@ -321,3 +321,4 @@ def r8_arm(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
 SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r5_board, r8_trigger, r9_breakout, r10_price_step,
                   r11_surge, r12_special_quote]
 BAR_RULES = [r3_stall, r6_rsi, r7_rebound, r8_arm]
+LIGHT_RULES = [r10_price_step, r11_surge]

@@ -52,6 +52,20 @@ class KabuClient:
         return self._req("PUT", "/register",
                          {"Symbols": [{"Symbol": c, "Exchange": exchange} for c in codes]})
 
+    def register_add(self, codes: list[str], exchange: int = 1):
+        if codes:
+            return self._req("PUT", "/register",
+                             {"Symbols": [{"Symbol": c, "Exchange": exchange} for c in codes]})
+
+    def unregister(self, codes: list[str], exchange: int = 1):
+        if codes:
+            return self._req("PUT", "/unregister",
+                             {"Symbols": [{"Symbol": c, "Exchange": exchange} for c in codes]})
+
+    def ranking(self, type_: int, exchange: str = "ALL") -> list[dict]:
+        res = self._req("GET", f"/ranking?Type={type_}&ExchangeDivision={exchange}")
+        return res.get("Ranking") or []
+
     def board(self, code: str, exchange: int = 1) -> dict:
         return self._req("GET", f"/board/{code}@{exchange}")
 

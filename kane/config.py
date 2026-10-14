@@ -57,6 +57,25 @@ class RuleConfig:
 
 
 @dataclass
+class ScannerConfig:
+    enabled: bool = True
+    interval_sec: float = 10.0
+    call_gap_sec: float = 0.2  # ランキングAPIの呼び出し間隔（1秒10回の制限より十分ゆっくり）
+    max_push: int = 50
+    min_hold_sec: int = 600  # 入れた銘柄は最低この時間は外さない
+    keep_zone: float = 1.5  # 空き枠×この倍率の順位以内なら入れたままにする
+    light_alerts: bool = True  # PUSH未登録の銘柄もランキングの株価でR10・R11を判定
+    # [種類, 市場]。種類 1値上がり率 2値下がり率 3売買高 4売買代金 5TICK回数 6売買高急増 7売買代金急増
+    # 市場 ALL 全市場 / TP プライム / TS スタンダード / TG グロース
+    rankings: list = field(default_factory=lambda: [
+        [1, "ALL"], [6, "ALL"], [7, "ALL"], [5, "ALL"], [1, "TG"], [1, "TS"], [2, "ALL"],
+    ])
+    weights: dict = field(default_factory=lambda: {
+        "1": 1.0, "2": 0.5, "3": 0.5, "4": 0.5, "5": 0.8, "6": 1.2, "7": 1.0,
+    })
+
+
+@dataclass
 class SymbolInfo:
     code: str
     name: str
@@ -64,6 +83,7 @@ class SymbolInfo:
     breakout_vol5m: float | None = None
     issued_shares: float | None = None  # 時価総額の表示用
     ytd_high: float | None = None  # 前日までの年初来高値
+    group: str = ""  # 固定監視のグループ名（ipo / security など）
 
 
 @dataclass
@@ -80,6 +100,7 @@ class Config:
     session_end: str
     record_snapshots: bool
     rules: RuleConfig
+    scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
 
 def load_symbols(path: Path) -> list[SymbolInfo]:
@@ -102,6 +123,7 @@ def load_symbols(path: Path) -> list[SymbolInfo]:
                     breakout_vol5m=num("breakout_vol5m"),
                     issued_shares=num("issued_shares"),
                     ytd_high=num("ytd_high"),
+                    group=(row.get("group") or "").strip(),
                 )
             )
     return out
@@ -123,6 +145,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
     session = raw.get("session", {})
     known = {f.name for f in fields(RuleConfig)}
     rules = RuleConfig(**{k: v for k, v in raw.get("rules", {}).items() if k in known})
+    sknown = {f.name for f in fields(ScannerConfig)}
+    scanner = ScannerConfig(**{k: v for k, v in raw.get("scanner", {}).items() if k in sknown})
 
     return Config(
         base_url=kabu.get("base_url", "http://localhost:18080/kabusapi"),
@@ -137,4 +161,5 @@ def load_config(path: str | Path = "config.toml") -> Config:
         session_end=session.get("end", "15:35"),
         record_snapshots=raw.get("record", {}).get("snapshots", True),
         rules=rules,
+        scanner=scanner,
     )

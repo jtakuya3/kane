@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from .config import RuleConfig, SymbolInfo
 from .models import Alert, Bar, Snapshot
-from .rules import BAR_RULES, SNAPSHOT_RULES
+from .rules import BAR_RULES, LIGHT_RULES, SNAPSHOT_RULES
 from .state import SymbolState
 
 
@@ -24,6 +24,25 @@ class Engine:
                 c: SymbolState(info, self.rules.breakout_default_vol5m_ratio)
                 for c, info in self.symbols.items()
             }
+
+    def add_symbol(self, info: SymbolInfo):
+        """ランキングから入った銘柄を途中で追加する。"""
+        if info.code in self.symbols:
+            return
+        self.symbols[info.code] = info
+        if self._day is not None:
+            self.states[info.code] = SymbolState(info, self.rules.breakout_default_vol5m_ratio)
+
+    def process_light(self, snap: Snapshot, silent: bool = False) -> list[Alert]:
+        """ランキングの株価だけで判定できるルール（R10・R11）を回す。PUSH未登録の銘柄用。"""
+        self._reset_if_new_day(snap.ts)
+        st = self.states.get(snap.symbol)
+        if st is None:
+            return []
+        alerts = []
+        for rule in LIGHT_RULES:
+            alerts += rule(st, snap, self.rules)
+        return [] if silent else alerts
 
     def process(self, snap: Snapshot) -> list[Alert]:
         self._reset_if_new_day(snap.ts)
