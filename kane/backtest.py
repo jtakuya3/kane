@@ -94,7 +94,8 @@ def _from_min_agg(df, step: int = 1):
     import pandas as pd
 
     code = df["code"].astype(str).str.strip()
-    code = code.where(code.str.len() != 5, code.str[:4])  # 5桁コードの末尾（チェック桁）を落とす
+    # 5桁コードは末尾0（普通株）のときだけ4桁にする。末尾が0以外（優先株など別銘柄）は5桁のまま残す
+    code = code.where(~((code.str.len() == 5) & code.str.endswith("0")), code.str[:4])
     minutes = df["min1"] if step == 1 else df["min5"] * 5
     dt = pd.to_datetime(df["d"].astype(str), format="%Y%m%d") + pd.to_timedelta(minutes, unit="m")
     px = df["pv"] / df["vv"]
@@ -162,11 +163,15 @@ def bar_minutes(bars) -> int:
 
 
 def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_change: float,
-        codes: set[str] | None):
+        codes: set[str] | None, max_day_change: float = 0.4):
     days = day_table(bars)
     days["move"] = [max(h / p - 1, 1 - lo / p) if p == p and p else 0
                     for h, lo, p in zip(days["high"], days["low"], days["prev_close"])]
-    sel = days[(days["move"] >= min_day_change) & days["prev_close"].notna()]
+    # 1日で±40%を超える動き（株式分割・併合やデータ不整合の可能性が高い）は除外する
+    bad = days["move"] > max_day_change
+    sel = days[(days["move"] >= min_day_change) & ~bad & days["prev_close"].notna()]
+    if bad.any():
+        print(f"除外：1日で±{max_day_change:.0%}超動いた {int(bad.sum()):,} 銘柄日（分割・データ不整合の疑い）")
     if codes:
         sel = sel[sel["code"].isin(codes)]
     keys = set(zip(sel["code"], sel["day"]))
