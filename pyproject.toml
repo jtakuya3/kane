@@ -1,11 +1,12 @@
 [tool.poetry]
 name = "kane"
 version = "0.1.0"
-description = ""
+description = "デイトレ用リアルタイム検出（kabuステーションAPI → ルール判定 → Slack通知・CSV保存）"
 authors = ["Takuya Kanesaki"]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.11"
+websockets = ">=12"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

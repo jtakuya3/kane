@@ -37,3 +37,7 @@ ENV/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# kane data
+data/
+*.log

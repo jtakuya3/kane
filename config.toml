@@ -1,0 +1,30 @@
+# kane 監視設定。パスは既存の点火監視システムと同じファイルを流用（中身はリポジトリに入れない）
+[kabu]
+base_url = "http://localhost:18080/kabusapi"
+ws_url = "ws://localhost:18080/kabusapi/websocket"
+password_file = "C:/Users/takuy/Downloads/kabu_api_word.txt"
+
+[slack]
+enabled = true
+webhook_file = "C:/Users/takuy/Downloads/slack_webhook.txt"
+
+[notify]
+beep = false   # true にするとWindowsの通知音も鳴らす
+
+[paths]
+symbols_csv = "symbols.csv"
+data_dir = "C:/Users/takuy/Desktop/08_開発案件/kane_data"
+
+[session]
+start = "08:55"
+end = "15:35"
+
+[record]
+snapshots = true   # PUSH配信を全部CSVに残す（リプレイ検証用）
+
+# 閾値（省略時は kane/config.py の既定値）
+[rules]
+turnover_levels = [0.5, 0.8, 0.95]
+vwap_dev_levels = [0.05, 0.08, 0.10]
+board_weak = 0.6
+board_strong = 1.5
