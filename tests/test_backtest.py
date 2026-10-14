@@ -9,21 +9,14 @@ from kane.evaluate import AlertRow, PriceBook, evaluate, expected_dir, summarize
 
 def make_bars(tmp_path):
     rows = []
-    # 前日：終値1000
-    d0 = datetime(2026, 3, 2, 9, 0)
-    for i in range(60):
-        rows.append(("4498", d0 + timedelta(minutes=i), 1000, 1001, 999, 1000, 1000))
-    # 当日：急騰して高値1200、その後失速して下落
-    d1 = datetime(2026, 3, 3, 9, 0)
+    days = pd.bdate_range("2026-01-05", periods=26)
+    for d in days[:-1]:  # 平常日：株価1000円、1分1,000株（1日6万株）
+        for i in range(60):
+            rows.append(("4498", d + timedelta(hours=9, minutes=i), 1000, 1001, 999, 1000, 1000))
     px = 1000
-    for i in range(120):
-        if i < 40:
-            o, c, v = px, px + 5, 200_000
-        elif i < 60:
-            o, c, v = px, px, 20_000
-        else:
-            o, c, v = px, px - 2, 50_000
-        rows.append(("4498", d1 + timedelta(minutes=i), o, max(o, c) + 1, min(o, c) - 1, c, v))
+    for i in range(60):  # 最終日：1分5,000株（RVOL約5倍）で上昇し、年初来高値1001を更新
+        o, c = px, px + 4
+        rows.append(("4498", days[-1] + timedelta(hours=9, minutes=i), o, c + 1, o - 1, c, 5000))
         px = c
     df = pd.DataFrame(rows, columns=["銘柄コード", "日時", "始値", "高値", "安値", "終値", "出来高"])
     p = tmp_path / "min1.parquet"
@@ -40,12 +33,12 @@ def test_backtest_end_to_end(tmp_path):
     bars = load_bars([str(make_bars(tmp_path))], "bars", {})
     known = {"4498": SymbolInfo("4498", "サイバートラスト", 7_285_800)}
     alerts, book, used = run(bars, RuleConfig(), known, 0.05, None)
-    rules = {a.rule for a in alerts}
-    assert "R10" in rules and "R1" in rules and "R2" in rules
+    r10 = [a for a in alerts if a.rule == "R10"]
+    assert [a.level for a in r10][:1] == ["買い候補"]
     rows = evaluate(alerts, book)
     assert rows and all("ret5" in r for r in rows)
     summ = summarize(rows)
-    assert any(s["rule"] == "R2" and s["n"] > 0 for s in summ)
+    assert any(s["rule"] == "R10" and s["level"] == "買い候補" for s in summ)
     study = turnover_study(used, known)
     assert study[0]["code"] == "4498" and 0 < study[0]["high_vol_share"] <= 1
 
@@ -127,9 +120,9 @@ def test_period_table_and_daily_rvol(tmp_path):
     from kane.evaluate import AlertRow
 
     t1, t2 = datetime(2026, 1, 10, 10, 0), datetime(2026, 5, 10, 10, 0)
-    alerts = [AlertRow(t1, "X", "R10", "年初来高値", 100.0), AlertRow(t2, "X", "R10", "年初来高値", 100.0)]
-    rows = [{"rule": "R10", "level": "年初来高値", "dir": 0, "ret30": 0.01, "rvol": 3.0},
-            {"rule": "R10", "level": "年初来高値", "dir": 0, "ret30": -0.01, "rvol": 3.0}]
+    alerts = [AlertRow(t1, "X", "R10", "買い候補", 100.0), AlertRow(t2, "X", "R10", "買い候補", 100.0)]
+    rows = [{"rule": "R10", "level": "買い候補", "dir": 1, "ret30": 0.01, "rvol": 3.0},
+            {"rule": "R10", "level": "買い候補", "dir": 1, "ret30": -0.01, "rvol": 3.0}]
     text, recs = period_table(rows, alerts)
     assert "12〜2月" in text and "5〜6月" in text
     assert any(r["period"] == "12〜2月" and r["n"] == 1 and r["avg30"] == 0.01 for r in recs)

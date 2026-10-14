@@ -67,7 +67,7 @@ def test_rss_monitor_scan_filter(tmp_path):
     small = Snapshot(TS, "9999", 100, 1000)  # 売買代金10万円
     big = Snapshot(TS, "9999", 1000, 200_000)  # 2億円
     m.emit([Alert(TS, "9999", "R10", "5%段階", "a", 100)], {"9999": small})
-    m.emit([Alert(TS, "9999", "R2", "5%", "b", 1000), Alert(TS, "9999", "R10", "5%段階", "c", 1000)], {"9999": big})
+    m.emit([Alert(TS, "9999", "R13", "売り", "b", 1000), Alert(TS, "9999", "R10", "買い候補", "c", 1000)], {"9999": big})
     m.emit([Alert(TS, "4498", "R2", "5%", "d", 1000)], {})
     assert sent == ["c", "d"]
 
@@ -82,5 +82,17 @@ def test_vwap_from_value_when_missing():
 
 def test_feed_color_keys():
     from kane.feed import color_key
-    assert color_key("R13", True) == "important" and color_key("R9", False) == "buy"
-    assert color_key("R4", False) == "warn" and color_key("R10", False) == "info"
+    assert color_key("R13:売り", True) == "important" and color_key("R10:買い候補", False) == "buy"
+    assert color_key("R4:WARN", False) == "warn" and color_key("R10:利確警戒", False) == "warn"
+    assert color_key("R14:張り付き", False) == "info"
+
+
+def test_parse_rsschart_table():
+    from datetime import date
+
+    from kane.baseline import parse_chart
+    table = [("銘柄名称", "市場名称", "足種", "日付", "時刻", "始値", "高値", "安値", "終値", "出来高"),
+             ("サイバートラスト", "東証", "日足", "2026/10/10", "", 1800, 1850, 1790, 1840, 3_000_000),
+             ("サイバートラスト", "東証", "日足", "2026/10/13", "", 1851, 1972, 1830, 1960, "12,000,000"),
+             ("サイバートラスト", "東証", "日足", "2026/10/14", "", 1891, 2237, 1790, 2070, 19_960_800)]
+    assert parse_chart(table, date(2026, 10, 14)) == [3_000_000, 12_000_000]

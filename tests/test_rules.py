@@ -7,8 +7,12 @@ from kane.models import Snapshot
 T0 = datetime(2026, 10, 15, 9, 0, 0)
 
 
-def eng(float_shares=1_000_000, vol5m=None, **rules):
-    return Engine([SymbolInfo("TEST", "テスト", float_shares, vol5m)], RuleConfig(**rules))
+FLAT = [[0, 0.0], [1, 1.0], [390, 1.0]]  # テスト用：9:01以降は「1日分が出た」とみなす配分
+
+
+def eng(float_shares=1_000_000, vol5m=None, avg_vol=None, **rules):
+    rules.setdefault("volume_profile", FLAT)
+    return Engine([SymbolInfo("TEST", "テスト", float_shares, vol5m, avg_vol=avg_vol)], RuleConfig(**rules))
 
 
 def snap(sec, price, vol, vwap=None, high=None, buy5=None, sell5=None):
@@ -33,79 +37,6 @@ def test_bars_built_from_cumulative_volume():
     run(e, [snap(0, 100, 1000), snap(30, 102, 1500), snap(61, 101, 1800), snap(125, 99, 2000)])
     bars = list(e.states["TEST"].bars)
     assert [(b.open, b.high, b.close, b.volume) for b in bars] == [(100, 102, 102, 500), (101, 101, 101, 300)]
-
-
-def test_r1_turnover_fires_once_per_level():
-    e = eng()
-    a = run(e, [snap(0, 100, 0), snap(1, 100, 400_000), snap(2, 100, 600_000), snap(3, 100, 910_000)])
-    assert [x.level for x in rules_of(a, "R1")] == ["40%", "90%"]
-
-
-def test_r2_vwap_dev_rearms_after_falling_back():
-    e = eng()
-    a = run(e, [snap(0, 106, 0, vwap=100), snap(1, 107, 0, vwap=100),
-                snap(2, 102, 0, vwap=100), snap(3, 106, 0, vwap=100)])
-    assert [x.level for x in rules_of(a, "R2")] == ["5%", "5%"]
-
-
-def test_r4_double_top_on_weak_volume():
-    e = eng(float_shares=None)
-    s = [snap(0, 1000, 0, high=1000)]
-    vol = 0
-    for i in range(1, 6):  # 大商いで高値1100へ
-        vol += 100_000
-        s.append(snap(i * 60, 1000 + i * 20, vol))
-    for i in range(6, 12):  # 3%押す
-        vol += 5_000
-        s.append(snap(i * 60, 1065, vol))
-    for i in range(12, 14):  # 薄商いで再接近
-        vol += 5_000
-        s.append(snap(i * 60, 1095, vol))
-    a = run(e, s)
-    assert len(rules_of(a, "R4")) == 1
-
-
-def test_r9_breakout_with_volume_only():
-    e = eng(float_shares=None, vol5m=50_000, breakout_quiet_bars=3)
-    s, vol = [], 0
-    prices = [1000, 1050, 1020, 1010, 1015, 1020, 1030]
-    for i, p in enumerate(prices):
-        vol += 1_000
-        s.append(snap(i * 60, p, vol))
-    s.append(snap(len(prices) * 60, 1060, vol + 60_000))
-    a = run(e, s)
-    assert len(rules_of(a, "R9")) == 1
-
-
-def test_recorder_and_replay_roundtrip(tmp_path):
-    from kane.config import Config
-    from kane.replay import replay
-    from kane.sinks import Recorder
-
-    rec = Recorder(tmp_path)
-    for x in [snap(0, 100, 0), snap(1, 100, 500_000), snap(61, 101, 900_000)]:
-        rec.snapshot(x)
-    rec.snaps.close()
-    cfg = Config("", "", tmp_path, None, False, False, tmp_path,
-                 [SymbolInfo("TEST", "テスト", 1_000_000, None)], "08:55", "15:35", True, RuleConfig())
-    alerts = replay(cfg, tmp_path / "snapshots_20261015.csv")
-    assert [a.level for a in alerts if a.rule == "R1"] == ["40%", "90%"]
-
-
-def test_r10_price_step_and_ytd_high():
-    e = Engine([SymbolInfo("4382", "ＨＥＲＯＺ", None, issued_shares=17_780_000, ytd_high=1460)], RuleConfig())
-
-    def s(sec, price):
-        return Snapshot(T0 + timedelta(seconds=sec), "4382", price, 0, prev_close=1398)
-
-    a = run(e, [s(0, 1420), s(1, 1455), s(2, 1468), s(3, 1470), s(4, 1540), s(5, 1300)])
-    r10 = rules_of(a, "R10")
-    assert [x.level for x in r10] == ["5%段階", "10%段階", "−5%段階"]
-    assert r10[0].message.splitlines()[1:4] == [
-        "4382ＨＥＲＯＺ時価総額 261億円",
-        "年初来高値更新株価 1468円 前日比 +70円（+5.01%）",
-        "直前基準 1398円比 +5.01%  5%段階",
-    ]
 
 
 def board_snap(sec, buy, sell, price=2000):
@@ -192,3 +123,52 @@ def test_r13_ignores_wall_scrolling_into_view():
     shifted_buy = [(2002 - i, 1000 + i * 100) for i in range(10)]
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, shifted_buy, shifted_sell, 2002)])
     assert not rules_of(a, "R13")
+
+
+def test_r2_needs_8pct_and_rvol20():
+    # 平均日出来高1,000株 → 累計出来高30,000株でRVOL30倍
+    e = eng(avg_vol=1_000)
+    a = run(e, [snap(60, 106, 30_000, vwap=100), snap(61, 109, 30_000, vwap=100)])
+    r2 = rules_of(a, "R2")
+    assert [x.level for x in r2] == ["8%"]  # +5%は出さない、+8%は出す
+    assert "浮動株回転率 3%" in r2[0].message and "RVOL 30.0倍" in r2[0].message
+    e2 = eng(avg_vol=1_000)
+    a = run(e2, [snap(60, 109, 5_000, vwap=100)])  # RVOL5倍 → 出さない
+    assert not rules_of(a, "R2")
+
+
+def test_r4_only_with_rvol20():
+    def scenario(avg):
+        e = eng(float_shares=None, avg_vol=avg)
+        s_ = [snap(60, 1000, 0, high=1000)]
+        vol = 0
+        for i in range(2, 7):
+            vol += 100_000
+            s_.append(snap(i * 60, 1000 + i * 20, vol))
+        for i in range(7, 13):
+            vol += 5_000
+            s_.append(snap(i * 60, 1065, vol))
+        for i in range(13, 15):
+            vol += 5_000
+            s_.append(snap(i * 60, 1115, vol))
+        return rules_of(run(e, s_), "R4")
+    assert len(scenario(10_000)) == 1  # 累計約54万株 ÷ 1万株 = 54倍
+    assert scenario(1_000_000) == []  # RVOL 0.5倍 → 出さない
+
+
+def test_r10_buy_candidate_and_fade():
+    def e10(avg):
+        return Engine([SymbolInfo("4382", "ＨＥＲＯＺ", None, issued_shares=17_780_000, ytd_high=1460,
+                                  avg_vol=avg)], RuleConfig(volume_profile=FLAT))
+
+    def s(sec, price, vol):
+        return Snapshot(T0 + timedelta(seconds=sec), "4382", price, vol, prev_close=1398)
+
+    a = run(e10(10_000), [s(60, 1450, 30_000), s(61, 1468, 50_000)])  # RVOL 5倍で年初来高値更新
+    r10 = rules_of(a, "R10")
+    assert [x.level for x in r10] == ["買い候補"]
+    assert "買い候補：年初来高値 1460円を更新 × 出来高5.0倍" in r10[0].message
+    assert "4382ＨＥＲＯＺ時価総額 261億円" in r10[0].message
+    assert rules_of(run(e10(1_000), [s(60, 1468, 50_000)]), "R10") == []  # RVOL 50倍 → 買い候補は出さない
+    a = run(e10(1_000), [s(60, 1750, 50_000)])  # +25%超 × RVOL 50倍 → 利確警戒
+    assert [x.level for x in rules_of(a, "R10")] == ["利確警戒"]

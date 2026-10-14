@@ -43,6 +43,8 @@ def expected_dir(rule: str, level: str) -> int:
         return 1
     if rule == "R13":
         return 1 if level == "買い" else -1 if level == "売り" else 0
+    if rule == "R10":
+        return {"買い候補": 1, "利確警戒": -1}.get(level, 0)
     if rule == "R14":
         return {"張り付き": 1, "警戒": -1, "剥がれ": -1}.get(level, 0)
     return 0  # R10 などは方向を決めず、上げ下げをそのまま記録する

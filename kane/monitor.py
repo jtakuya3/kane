@@ -111,7 +111,7 @@ class Monitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            await asyncio.to_thread(self.notifier.send, a.message, pop, a.rule)
+            await asyncio.to_thread(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}")
 
     async def wait_session(self):
         while True:
@@ -167,7 +167,8 @@ class Monitor:
                 cands = await asyncio.to_thread(sc.fetch)
                 now = datetime.now()
                 for c in cands.values():
-                    self.engine.add_symbol(SymbolInfo(c.code, c.name, None))
+                    self.engine.add_symbol(SymbolInfo(c.code, c.name, None,
+                                                      avg_vol=self.cfg.baseline.get(c.code)))
                 add, remove = sc.select(cands, now)
                 if remove:
                     await asyncio.to_thread(self.client.unregister, remove)

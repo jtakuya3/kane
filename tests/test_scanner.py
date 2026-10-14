@@ -40,7 +40,7 @@ def test_light_rules_from_ranking_price():
     from kane.engine import Engine
     from kane.models import Snapshot
 
-    e = Engine([], RuleConfig())
+    e = Engine([], RuleConfig(price_step_alerts=True))
     e.add_symbol(SymbolInfo("9999", "テスト", None))
     s0 = Snapshot(NOW, "9999", 1040, 0, prev_close=1000)
     assert e.process_light(s0, silent=True) == []

@@ -1,7 +1,11 @@
-"""検出ルール R1〜R9。
+"""検出ルール。バックテストで効いた「出来高の条件付き」の組み合わせだけを通知する。
 
-スナップショットごとに判定するもの（R1, R2, R4, R5, R8の発火, R9）と、
-1分足の確定ごとに判定するもの（R3, R6, R7, R8の準備）に分かれる。
+- R10 買い候補：年初来高値の更新 × RVOL 2〜10倍
+- R10 利確警戒：前日比+25%以上 × RVOL 10倍以上
+- R2 VWAP乖離+8%以上 × RVOL 20倍以上（天井警戒）
+- R3 失速 / R4 ダブルトップ × RVOL 20倍以上（天井警戒）
+- R13 大口板 / R14 ストップ高（イベント通知）
+すべての通知に浮動株回転率とRVOLを添える。
 """
 from __future__ import annotations
 
@@ -12,13 +16,6 @@ from .config import RuleConfig
 from .models import Alert, Bar, Snapshot
 from .state import SymbolState
 
-def r1_label(lv: float) -> str:
-    if lv < 0.6:
-        return "天井警戒"
-    if lv < 0.85:
-        return "急落警戒"
-    return "底候補（1回転手前）"
-R2_LABEL = {0.05: "伸び切り", 0.08: "過熱", 0.10: "過熱+"}
 
 
 def _fmt(x: float | None, pct=False) -> str:
@@ -27,30 +24,48 @@ def _fmt(x: float | None, pct=False) -> str:
     return f"{x:+.1%}" if pct else f"{x:,.0f}"
 
 
-def _alert(st: SymbolState, ts: datetime, rule: str, level: str, text: str, **extras) -> Alert:
+def vol_frac(ts: datetime, profile: list) -> float:
+    """その時刻までに、普段1日の出来高の何割が出ているか（9:00からの分で線形補間）。"""
+    m = (ts.hour - 9) * 60 + ts.minute + ts.second / 60
+    if m <= 0:
+        return profile[1][1] if len(profile) > 1 else 0.05
+    for (m0, f0), (m1, f1) in zip(profile, profile[1:]):
+        if m <= m1:
+            return f0 + (f1 - f0) * (m - m0) / (m1 - m0) if m1 > m0 else f1
+    return profile[-1][1]
+
+
+def rvol_of(st: SymbolState, ts: datetime, cfg: RuleConfig) -> float | None:
+    """RVOL＝今の累計出来高 ÷（過去60日の平均日出来高 × この時刻までの普段の割合）。"""
+    if not st.last or not st.info.avg_vol:
+        return None
+    frac = max(vol_frac(ts, cfg.volume_profile), 0.03)  # 寄り直後の暴れを抑える
+    return st.last.volume / (st.info.avg_vol * frac)
+
+
+def vol_line(st: SymbolState, ts: datetime, cfg: RuleConfig) -> str:
+    """浮動株回転率とRVOLの1行。"""
+    fl = st.info.float_shares
+    turn = (f"浮動株回転率 {st.turnover:.0%}（浮動株{fl / 1e4:,.0f}万株）" if st.turnover is not None
+            else "浮動株回転率 -（浮動株未登録）")
+    rv = rvol_of(st, ts, cfg)
+    return f"{turn}  RVOL {rv:.1f}倍" if rv is not None else f"{turn}  RVOL -（平均出来高未取得）"
+
+
+def _alert(st: SymbolState, ts: datetime, rule: str, level: str, text: str, cfg: RuleConfig,
+           **extras) -> Alert:
     tag = f"{st.info.code} {st.info.name}".strip()
     price = st.last.price if st.last else 0.0
-    turn = f"{st.turnover:.0%}" if st.turnover is not None else "-"
-    tail = f"｜{_fmt(price)}円 回転率{turn} VWAP乖離{_fmt(st.vwap_dev, True)}"
-    return Alert(ts, st.info.code, rule, level, f"[{rule}] {tag} {text}{tail}", price,
-                 {"turnover": st.turnover, "vwap_dev": st.vwap_dev, **extras})
+    msg = (f"{ts:%H:%M:%S}\n[{rule}] {tag} {text}\n"
+           f"{_fmt(price)}円 VWAP乖離{_fmt(st.vwap_dev, True)}\n{vol_line(st, ts, cfg)}")
+    return Alert(ts, st.info.code, rule, level, msg, price,
+                 {"turnover": st.turnover, "vwap_dev": st.vwap_dev, "rvol": rvol_of(st, ts, cfg), **extras})
 
 
 # ---------------- スナップショット系 ----------------
 
-def r1_turnover(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    t = st.turnover
-    if t is None:
-        return []
-    out = []
-    for lv in cfg.turnover_levels:
-        if t >= lv and st.once(("R1", lv)):
-            label = r1_label(lv)
-            out.append(_alert(st, s.ts, "R1", f"{lv:.0%}", f"浮動株回転率{lv:.0%}到達 {label}"))
-    return out
-
-
 def r2_vwap_dev(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """VWAP乖離+8%以上 × RVOL 20倍以上（出来高の噴き上げ後の戻りを警戒）。"""
     d = st.vwap_dev
     if d is None:
         return []
@@ -60,7 +75,11 @@ def r2_vwap_dev(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
         armed = st.vars.get(key, True)
         if armed and d >= lv:
             st.vars[key] = False
-            out.append(_alert(st, s.ts, "R2", f"{lv:.0%}", f"VWAP乖離+{lv:.0%}超え {R2_LABEL.get(lv, '')}"))
+            rv = rvol_of(st, s.ts, cfg)
+            if lv < cfg.r2_min_level or rv is None or rv < cfg.top_rvol_min:
+                continue
+            out.append(_alert(st, s.ts, "R2", f"{lv:.0%}",
+                              f"天井警戒：VWAP乖離+{lv:.0%}超え × 出来高{rv:.0f}倍（噴き上げ後の戻りに注意）", cfg))
         elif not armed and d < lv - cfg.vwap_dev_rearm:
             st.vars[key] = True
     return out
@@ -83,25 +102,12 @@ def r4_double_top(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
         now5 = st.rolling_vol(s.ts)
         if now5 <= v1 * cfg.dtop_vol_ratio:
             v["pulled"] = False
+            rv = rvol_of(st, s.ts, cfg)
+            if rv is None or rv < cfg.top_rvol_min:
+                return []
             return [_alert(st, s.ts, "R4", "WARN",
-                           f"高値{_fmt(h1)}に再接近、5分出来高{_fmt(now5)}（前回高値時{_fmt(v1)}の{now5 / v1:.0%}）ダブルトップ警戒")]
+                           f"天井警戒：高値{_fmt(h1)}に再接近、5分出来高が前回高値時の{now5 / v1:.0%}（ダブルトップ）", cfg)]
     return []
-
-
-def r9_breakout(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    bars = list(st.bars)
-    q = cfg.breakout_quiet_bars
-    if st.breakout_vol5m is None or len(bars) <= q:
-        return []
-    prior_high = max(b.high for b in bars[:-q])
-    recent_high = max(b.high for b in bars[-q:])
-    if recent_high > prior_high or s.price <= prior_high:
-        return []
-    v5 = st.rolling_vol(s.ts)
-    if v5 < st.breakout_vol5m or not st.once(("R9", prior_high)):
-        return []
-    return [_alert(st, s.ts, "R9", "BREAK",
-                   f"高値{_fmt(prior_high)}を出来高を伴って上抜け（5分出来高{_fmt(v5)}≧{_fmt(st.breakout_vol5m)}）")]
 
 
 def _yen(x: float) -> str:
@@ -109,20 +115,15 @@ def _yen(x: float) -> str:
     return f"{x:.0f}" if float(x).is_integer() else f"{x:.1f}"
 
 
-def _card(st: SymbolState, s: Snapshot, rule: str, level: str, body: list[str], **extras) -> Alert:
+def _card(st: SymbolState, s: Snapshot, rule: str, level: str, body: list[str], cfg: RuleConfig,
+          **extras) -> Alert:
     """時刻・銘柄・時価総額の見出し付きの複数行通知。"""
     i = st.info
     cap = f"時価総額 {s.price * i.issued_shares / 1e8:,.0f}億円" if i.issued_shares else ""
     lines = [f"{s.ts:%H:%M:%S}", f"{i.code}{i.name}{cap}", *body]
-    tail = []
-    if st.turnover is not None:
-        tail.append(f"回転率{st.turnover:.0%}")
-    if rule == "R10" and st.vwap_dev is not None:
-        tail.append(f"VWAP乖離{st.vwap_dev:+.1%}")
-    if tail:
-        lines.append(" ".join(tail))
+    lines.append(vol_line(st, s.ts, cfg))
     return Alert(s.ts, i.code, rule, level, "\n".join(lines), s.price,
-                 {"turnover": st.turnover, "vwap_dev": st.vwap_dev, **extras})
+                 {"turnover": st.turnover, "vwap_dev": st.vwap_dev, "rvol": rvol_of(st, s.ts, cfg), **extras})
 
 
 def _pct_prev(s: Snapshot) -> str:
@@ -134,7 +135,7 @@ def _vwap_txt(st: SymbolState) -> str:
 
 
 def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
-    """前日終値比が5%刻みの段階を初めて超えたとき、または年初来高値を初めて更新したとき。"""
+    """年初来高値の更新 × RVOL 2〜10倍 → 買い候補。前日比+25%以上 × RVOL 10倍以上 → 利確警戒。"""
     pc = s.prev_close
     if not pc:
         return []
@@ -146,26 +147,24 @@ def r10_price_step(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]
         st.vars["step_max"] = n
     if step_down:
         st.vars["step_min"] = n
+    rv = rvol_of(st, s.ts, cfg)
+    step = f"{abs(n) * cfg.price_step:.0%}段階" if n > 0 else f"−{abs(n) * cfg.price_step:.0%}段階" if n < 0 else ""
+    price_line = f"株価 {_yen(s.price)}円 前日比 {s.price - pc:+.0f}円（{chg:+.2%}）  {_vwap_txt(st)}".rstrip()
+    out = []
 
     ytd = st.info.ytd_high
-    ytd_break = bool(ytd) and s.price > ytd
-    first_ytd = ytd_break and st.once("R10ytd")
-    if not (step_up or step_down or first_ytd):
-        return []
+    if (ytd and ytd < s.price <= ytd * (1 + cfg.ytd_near) and rv is not None
+            and cfg.buy_rvol_min <= rv < cfg.buy_rvol_max and st.once("R10ytd")):
+        out.append(_card(st, s, "R10", "買い候補", [
+            f"買い候補：年初来高値 {_yen(ytd)}円を更新 × 出来高{rv:.1f}倍", price_line], cfg, change=chg))
 
-    day_high = st.day_high
-    if ytd_break:
-        head = "年初来高値更新"
-    elif day_high and s.price >= day_high:
-        head = "当日高値更新"
-    else:
-        head = ""
-    step = f"{abs(n) * cfg.price_step:.0%}段階" if n > 0 else f"−{abs(n) * cfg.price_step:.0%}段階" if n < 0 else ""
-    body = [
-        f"{head}株価 {_yen(s.price)}円 前日比 {s.price - pc:+.0f}円（{chg:+.2%}）",
-        f"直前基準 {_yen(pc)}円比 {chg:+.2%}  {step}".rstrip(),
-    ]
-    return [_card(st, s, "R10", step or "年初来高値", body, change=chg)]
+    if (step_up and chg >= cfg.fade_step and rv is not None and rv >= cfg.fade_rvol_min
+            and st.once(("R10fade", n))):
+        out.append(_card(st, s, "R10", "利確警戒", [
+            f"利確警戒：前日比 {step} × 出来高{rv:.0f}倍（ここから押されやすい）", price_line], cfg, change=chg))
+    elif cfg.price_step_alerts and (step_up or step_down):
+        out.append(_card(st, s, "R10", step, [f"株価の段階 {step}", price_line], cfg, change=chg))
+    return out
 
 
 SPECIAL_SIGN = "0102"  # kabuステーションAPIの気配フラグ：特別気配
@@ -208,7 +207,7 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
             f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）",
             f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{dist:+.2%}",
         ]
-        out.append(_card(st, s, "R13", side, body, wall_price=p, wall_qty=q, wall_mult=q / med))
+        out.append(_card(st, s, "R13", side, body, cfg, wall_price=p, wall_qty=q, wall_mult=q / med))
     return out
 
 
@@ -247,7 +246,7 @@ def r14_stop_high(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
             v["lim_at"] = True
             head = "ストップ高 再張り付き" if v.get("lim_peeled") else "ストップ高 張り付き"
             out.append(_card(st, s, "R14", "張り付き", [
-                f"{head} {_yen(up)}円  買い残 {qty:,.0f}株（約{up * qty / 1e4:,.0f}万円）"]))
+                f"{head} {_yen(up)}円  買い残 {qty:,.0f}株（約{up * qty / 1e4:,.0f}万円）"], cfg))
             return out
         peak = max(q for _, q in hist)
         sell_at_up = s.sell1_qty if s.ask and s.ask >= up - 1e-9 else 0
@@ -257,7 +256,7 @@ def r14_stop_high(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
         if sell_at_up and sell_at_up >= qty:
             reasons.append(f"上限値の売り板 {sell_at_up:,.0f}株 ≧ 買い残 {qty:,.0f}株")
         if reasons and st.cooled("R14warn", s.ts, cfg.limit_warn_cooldown_sec):
-            out.append(_card(st, s, "R14", "警戒", ["ストップ高 剥がれ警戒", *reasons]))
+            out.append(_card(st, s, "R14", "警戒", ["ストップ高 剥がれ警戒", *reasons], cfg))
         v["lim_last_qty"] = qty
         return out
     if v.get("lim_at"):  # 張り付き → 剥がれ
@@ -267,7 +266,7 @@ def r14_stop_high(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
         out.append(_card(st, s, "R14", "剥がれ", [
             f"ストップ高 剥がれ 現在値 {_yen(s.price)}円（{up_txt}から{s.price / up - 1:+.2%}）",
             f"買い気配 {_yen(s.bid) if s.bid else '-'}円  直前の買い残 {last:,.0f}株",
-        ]))
+        ], cfg))
     return out
 
 
@@ -283,13 +282,15 @@ def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
         return []
     if b.close < hi * (1 - cfg.stall_near_high) or b.volume > peak * cfg.stall_vol_ratio:
         return []
+    rv = rvol_of(st, b.start, cfg)
+    if rv is None or rv < cfg.top_rvol_min:
+        return []
     if not st.cooled("R3", b.start, cfg.cooldown_sec):
         return []
     return [_alert(st, b.start, "R3", "WARN",
-                   f"高値圏で失速：1分出来高{_fmt(b.volume)}（ピーク{_fmt(peak)}の{b.volume / peak:.0%}）")]
+                   f"天井警戒：高値圏で失速（1分出来高がピークの{b.volume / peak:.0%}）", cfg)]
 
 
-SNAPSHOT_RULES = [r1_turnover, r2_vwap_dev, r4_double_top, r9_breakout, r10_price_step,
-                  r13_big_board, r14_stop_high]
+SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high]
 BAR_RULES = [r3_stall]
 LIGHT_RULES = [r10_price_step]

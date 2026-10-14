@@ -37,6 +37,20 @@ class RuleConfig:
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10
     limit_warn_cooldown_sec: int = 180
+    # 出来高の前提（バックテストで効いた組み合わせだけ通知する）
+    # RVOL＝その時刻までの出来高 ÷（過去60日の平均日出来高 × その時刻までに普段出る出来高の割合）
+    buy_rvol_min: float = 2.0  # 年初来高値の更新 × RVOL 2〜10倍 → 買い候補
+    buy_rvol_max: float = 10.0
+    ytd_near: float = 0.02  # 年初来高値から+2%以内（抜けた直後）だけ
+    top_rvol_min: float = 20.0  # VWAP乖離・失速・ダブルトップは RVOL 20倍以上のときだけ
+    r2_min_level: float = 0.08  # VWAP乖離は+8%以上だけ
+    fade_step: float = 0.25  # 前日比+25%以上 × RVOL 10倍以上 → 利確警戒
+    fade_rvol_min: float = 10.0
+    price_step_alerts: bool = False  # 5%刻みの段階通知（検証で優位性なし）を出すか
+    # 時刻（9:00からの分）→ その時刻までに1日の出来高の何割が出るか（市場全体の平均）
+    volume_profile: list = field(default_factory=lambda: [
+        [0, 0.0], [5, 0.10], [15, 0.17], [30, 0.25], [60, 0.35], [150, 0.53],
+        [210, 0.56], [270, 0.70], [330, 0.86], [390, 1.0]])
     # 共通
     cooldown_sec: int = 600
 
@@ -71,7 +85,7 @@ class RssConfig:
     universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
     max_scan: int = 600
     # スキャン銘柄で通知するルール（固定銘柄は全ルール）
-    scan_rules: list = field(default_factory=lambda: ["R10", "R14"])
+    scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14"])
     scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
     # RssMarket の項目名（公式の関数一覧・数式登録エディタの表記に合わせて変更できる）
     items: dict = field(default_factory=lambda: {
@@ -95,6 +109,7 @@ class SymbolInfo:
     issued_shares: float | None = None  # 時価総額の表示用
     ytd_high: float | None = None  # 前日までの年初来高値
     group: str = ""  # 固定監視のグループ名（ipo / security など）
+    avg_vol: float | None = None  # 過去60営業日の平均日出来高（baseline.csv）
 
 
 @dataclass
@@ -119,6 +134,29 @@ class Config:
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)
     base_dir: Path = Path(".")
+    baseline: dict = field(default_factory=dict)  # 銘柄 → 平均日出来高
+
+
+def load_baseline(data_dir: Path) -> dict:
+    p = data_dir / "baseline.csv"
+    out = {}
+    if p.exists():
+        with open(p, encoding="utf-8-sig", newline="") as f:
+            for r in csv.DictReader(f):
+                try:
+                    out[r["code"].strip()] = float(r["avg_vol"])
+                except (KeyError, ValueError):
+                    continue
+    return out
+
+
+def load_profile(data_dir: Path) -> list | None:
+    p = data_dir / "volume_profile.csv"
+    if not p.exists():
+        return None
+    with open(p, encoding="utf-8-sig", newline="") as f:
+        rows = [[float(r["minute"]), float(r["frac"])] for r in csv.DictReader(f)]
+    return rows or None
 
 
 def load_symbols(path: Path) -> list[SymbolInfo]:
@@ -163,9 +201,17 @@ def load_config(path: str | Path = "config.toml") -> Config:
     session = raw.get("session", {})
     known = {f.name for f in fields(RuleConfig)}
     rules = RuleConfig(**{k: v for k, v in raw.get("rules", {}).items() if k in known})
+    data_dir = p(paths.get("data_dir", "data"))
+    prof = load_profile(data_dir)
+    if prof:
+        rules.volume_profile = prof
     sknown = {f.name for f in fields(ScannerConfig)}
     scanner = ScannerConfig(**{k: v for k, v in raw.get("scanner", {}).items() if k in sknown})
 
+    symbols = load_symbols(p(paths.get("symbols_csv", "symbols.csv")))
+    baseline = load_baseline(data_dir)
+    for sy in symbols:
+        sy.avg_vol = baseline.get(sy.code)
     return Config(
         base_url=kabu.get("base_url", "http://localhost:18080/kabusapi"),
         ws_url=kabu.get("ws_url", "ws://localhost:18080/kabusapi/websocket"),
@@ -173,8 +219,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
         slack_webhook_file=p(slack["webhook_file"]) if slack.get("webhook_file") else None,
         slack_enabled=slack.get("enabled", False),
         beep=raw.get("notify", {}).get("beep", False),
-        data_dir=p(paths.get("data_dir", "data")),
-        symbols=load_symbols(p(paths.get("symbols_csv", "symbols.csv"))),
+        data_dir=data_dir,
+        symbols=symbols,
         session_start=session.get("start", "08:55"),
         session_end=session.get("end", "15:35"),
         record_snapshots=raw.get("record", {}).get("snapshots", True),
@@ -187,6 +233,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         source=raw.get("source", {}).get("type", "kabu"),
         rss=_rss_config(raw.get("rss", {})),
         base_dir=base,
+        baseline=baseline,
     )
 
 

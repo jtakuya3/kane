@@ -34,6 +34,8 @@ class RssMonitor:
         self.watch = list(cfg.symbols)
         self.pinned = {s.code for s in self.watch}
         self.scan = load_universe(cfg.base_dir / r.universe_csv, self.pinned, r.max_scan)
+        for s_ in self.scan:
+            s_.avg_vol = cfg.baseline.get(s_.code)
         self.wf, self.sf = watch_fields(r), scan_fields(r)
         self.engine = Engine(self.watch + self.scan, cfg.rules, on_bar=self.recorder.bar)
         self.infos = {s.code: s for s in self.watch + self.scan}
@@ -93,7 +95,7 @@ class RssMonitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            self.pool.submit(self.notifier.send, a.message, pop, a.rule)
+            self.pool.submit(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}")
 
     # ---- 1回分の読み取り ----
     def poll(self):

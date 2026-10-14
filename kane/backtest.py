@@ -145,12 +145,30 @@ def day_table(bars):
         high=("high", "max"), low=("low", "min"), close=("close", "last"),
         volume=("volume", "sum")).reset_index().sort_values(["code", "day"])
     d["prev_close"] = d.groupby("code")["close"].shift(1)
+    d["avg_vol"] = d.groupby("code")["volume"].transform(lambda s: s.rolling(60, min_periods=20).mean().shift(1))
     d["year"] = [x.year for x in d["day"]]
     d["ytd_high"] = d.groupby(["code", "year"])["high"].transform(lambda s: s.shift(1).cummax())
     first_day = d.groupby("year")["day"].transform("min")
     # データが年初から揃っていない年は、年初来高値を使わない
     d.loc[[fd.month > 1 or fd.day > 10 for fd in first_day], "ytd_high"] = None
     return d
+
+
+def volume_profile_from_bars(bars, step: int) -> list:
+    """市場全体の「9:00から何分で1日の出来高の何割が出るか」の平均カーブ。"""
+    import pandas as pd
+
+    b = bars[["code", "dt", "volume"]].copy()
+    b["day"] = b["dt"].dt.normalize()
+    b["m"] = ((b["dt"] - b["day"]).dt.total_seconds() // 60 - 540 + step).astype(int)  # 足の終わりの分
+    b = b[(b["m"] > 0) & (b["m"] <= 390)]
+    tot = b.groupby(["code", "day"])["volume"].transform("sum")
+    b = b[tot > 0]
+    b["share"] = b["volume"] / tot[tot > 0]
+    prof = b.groupby("m")["share"].sum() / b.groupby(["code", "day"]).ngroups
+    cum = prof.sort_index().cumsum()
+    cum = cum / cum.iloc[-1] if len(cum) and cum.iloc[-1] else cum
+    return [[0, 0.0]] + [[int(m), float(f)] for m, f in cum.items()]
 
 
 def bar_minutes(bars) -> int:
@@ -184,6 +202,9 @@ def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_chang
     print(f"足の長さ {step}分 / 1銘柄日あたり平均 {per_day:.0f}本（全部そろえば約{full:.0f}本 → 充足率 {per_day / full:.0%}）")
 
     infos = {c: known.get(c) or SymbolInfo(c, "", None) for c in sel["code"].unique()}
+    from dataclasses import replace
+
+    cfg_rules = replace(cfg_rules, volume_profile=volume_profile_from_bars(bars, step))
     engine = Engine(list(infos.values()), cfg_rules)
     meta = {(r.code, r.day): r for r in sel.itertuples()}
     book = PriceBook()
@@ -197,6 +218,7 @@ def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_chang
             base = known.get(code)
             infos[code].ytd_high = base.ytd_high if base and base.ytd_high else (
                 m.ytd_high if m.ytd_high == m.ytd_high else None)
+            infos[code].avg_vol = m.avg_vol if m.avg_vol == m.avg_vol else None
         for r in g.itertuples():
             book.add(r.code, r.dt.to_pydatetime(), r.high, r.low, r.close)
             m = meta[(r.code, day)]
@@ -375,14 +397,12 @@ def rvol_table(rows: list[dict], min_n: int = 30) -> tuple[str, list[dict]]:
     return "\n".join(lines), recs
 
 
-FOCUS = [  # 期間別に安定性を確かめる組み合わせ（ルール, 種類の判定, RVOLの範囲, 名前）
-    ("R10", lambda lv: lv == "年初来高値", 2, 10, "年初来高値 × RVOL2〜10倍（買い）"),
-    ("R10", lambda lv: lv == "年初来高値", 0, 1e9, "年初来高値（全体）"),
-    ("R2", lambda lv: lv in ("8%", "10%"), 20, 1e9, "VWAP乖離+8%以上 × RVOL20倍以上（天井）"),
-    ("R2", lambda lv: lv in ("8%", "10%"), 2, 20, "VWAP乖離+8%以上 × RVOL2〜20倍"),
-    ("R3", lambda lv: True, 20, 1e9, "失速 × RVOL20倍以上（天井）"),
-    ("R4", lambda lv: True, 20, 1e9, "ダブルトップ × RVOL20倍以上（天井）"),
-    ("R10", lambda lv: group_label("R10", lv) == "+25%以上の段階", 10, 1e9, "+25%以上 × RVOL10倍以上（利確）"),
+FOCUS = [  # 期間別に安定性を確かめる通知（ルール, 種類の判定, RVOLの範囲, 名前）。条件は判定側で適用済み
+    ("R10", lambda lv: lv == "買い候補", 0, 1e9, "買い候補（年初来高値×RVOL2〜10倍）"),
+    ("R10", lambda lv: lv == "利確警戒", 0, 1e9, "利確警戒（+25%以上×RVOL10倍以上）"),
+    ("R2", lambda lv: True, 0, 1e9, "天井警戒：VWAP乖離+8%以上×RVOL20倍以上"),
+    ("R3", lambda lv: True, 0, 1e9, "天井警戒：失速×RVOL20倍以上"),
+    ("R4", lambda lv: True, 0, 1e9, "天井警戒：ダブルトップ×RVOL20倍以上"),
 ]
 
 
@@ -408,7 +428,7 @@ def period_table(rows: list[dict], alerts) -> tuple[str, list[dict]]:
                 if r["rule"] != rule or not ok(r["level"]) or period_of(a.ts) != p:
                     continue
                 v = r.get("rvol")
-                if v is None or not (lo <= v < hi):
+                if (lo, hi) != (0, 1e9) and (v is None or not (lo <= v < hi)):
                     continue
                 if r["ret30"] is not None and abs(r["ret30"]) <= OUTLIER:
                     vals.append(r["ret30"] * (r["dir"] or 1))
