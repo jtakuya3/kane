@@ -84,3 +84,19 @@ def test_min1_agg_format(tmp_path):
     assert list(bars["code"]) == ["1357", "153A"]
     assert str(bars["dt"].iloc[0]) == "2026-03-10 09:09:00"
     assert round(bars["close"].iloc[0], 1) == round(2_249_658_000 / 470108, 1)
+
+
+def test_min5_agg_format(tmp_path):
+    df = pd.DataFrame({"code": ["13010"], "d": [20260303], "min5": [153], "n": [2],
+                       "pv": [2655000.0], "vv": [500.0]})
+    p = tmp_path / "intraday_agg_0304.parquet"
+    df.to_parquet(p)
+    bars = load_bars([str(p)], "bars", {})
+    assert str(bars["dt"].iloc[0]) == "2026-03-03 12:45:00" and bars["close"].iloc[0] == 5310
+
+
+def test_study_summary_text(tmp_path):
+    from kane.backtest import summarize_study
+    txt = summarize_study([{"high_vol_share": 0.4, "low_vol_share": 0.9, "high_time": "09:10",
+                            "high_float_turnover": None, "low_float_turnover": None}])
+    assert "中央値 40%" in txt and "寄り天型" in txt

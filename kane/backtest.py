@@ -88,14 +88,15 @@ def _datetime(df, m):
     return s
 
 
-def _from_min1_agg(df):
-    """_backtest_data の min1*.parquet 形式：code(5桁), d(YYYYMMDD), min1(0時からの分),
-    n(約定回数), pv(売買代金), vv(出来高)。四本値が無いので1分ごとのVWAP（pv÷vv）を株価として使う。"""
+def _from_min_agg(df, step: int = 1):
+    """_backtest_data の集計形式：code(5桁), d(YYYYMMDD), min1(0時からの分) または min5(0時からの5分単位),
+    n(約定回数), pv(売買代金), vv(出来高)。四本値が無いので、各足のVWAP（pv÷vv）を株価として使う。"""
     import pandas as pd
 
     code = df["code"].astype(str).str.strip()
     code = code.where(code.str.len() != 5, code.str[:4])  # 5桁コードの末尾（チェック桁）を落とす
-    dt = pd.to_datetime(df["d"].astype(str), format="%Y%m%d") + pd.to_timedelta(df["min1"], unit="m")
+    minutes = df["min1"] if step == 1 else df["min5"] * 5
+    dt = pd.to_datetime(df["d"].astype(str), format="%Y%m%d") + pd.to_timedelta(minutes, unit="m")
     px = df["pv"] / df["vv"]
     f = pd.DataFrame({"code": code, "dt": dt, "open": px, "high": px, "low": px, "close": px,
                       "volume": df["vv"]})
@@ -109,9 +110,11 @@ def load_bars(paths: list[str], kind: str, override: dict):
     frames = []
     for p in paths:
         df = _read(p)
-        if {"code", "d", "min1", "pv", "vv"} <= set(df.columns) and not override:
-            frames.append(_from_min1_agg(df))
-            print(f"読み込み {Path(p).name}: {len(frames[-1]):,}本（1分集計形式）")
+        cols = set(df.columns)
+        if {"code", "d", "pv", "vv"} <= cols and ({"min1", "min5"} & cols) and not override:
+            step = 1 if "min1" in cols else 5
+            frames.append(_from_min_agg(df, step))
+            print(f"読み込み {Path(p).name}: {len(frames[-1]):,}本（{step}分集計形式）")
             continue
         m = detect(list(df.columns), kind, override)
         dt = _datetime(df, m)
@@ -149,6 +152,15 @@ def day_table(bars):
     return d
 
 
+def bar_minutes(bars) -> int:
+    """足の長さ（分）を推定する（1分足なら1、5分足なら5）。"""
+    import numpy as np
+
+    d = bars.sort_values(["code", "dt"]).groupby("code")["dt"].diff().dropna()
+    d = d[d > np.timedelta64(0, "s")]
+    return max(1, int(d.min().total_seconds() // 60)) if len(d) else 1
+
+
 def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_change: float,
         codes: set[str] | None):
     days = day_table(bars)
@@ -160,7 +172,11 @@ def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_chang
     keys = set(zip(sel["code"], sel["day"]))
     info = {r.code: r for r in sel.itertuples()}  # 銘柄ごとの最新行（使わない）
     del info
+    step = bar_minutes(bars)
+    per_day = len(bars[[k in keys for k in zip(bars["code"], bars["dt"].dt.date)]]) / max(len(keys), 1)
+    full = 300 / step  # 取引時間5時間ぶんの本数
     print(f"対象：{len(keys):,} 銘柄日（前日比±{min_day_change:.0%}以上動いた日）")
+    print(f"足の長さ {step}分 / 1銘柄日あたり平均 {per_day:.0f}本（全部そろえば約{full:.0f}本 → 充足率 {per_day / full:.0%}）")
 
     infos = {c: known.get(c) or SymbolInfo(c, "", None) for c in sel["code"].unique()}
     engine = Engine(list(infos.values()), cfg_rules)
@@ -186,7 +202,7 @@ def run(bars, cfg_rules: RuleConfig, known: dict[str, SymbolInfo], min_day_chang
                 c[0] += dv
                 c[1] += dv * px
                 c[2] = max(c[2], px)
-                ts = r.dt.to_pydatetime() + timedelta(seconds=15 * k)
+                ts = r.dt.to_pydatetime() + timedelta(seconds=step * 15 * k)
                 snap = Snapshot(ts, r.code, float(px), c[0], vwap=c[1] / c[0] if c[0] else None,
                                 high=c[2], prev_close=float(m.prev_close))
                 for a in engine.process(snap):
@@ -217,6 +233,26 @@ def turnover_study(b, known: dict[str, SymbolInfo]) -> list[dict]:
             "low_float_turnover": (cum.loc[il] / fl) if fl else None,
         })
     return out
+
+
+def summarize_study(study: list[dict]) -> str:
+    """高値・安値が当日出来高の何%時点で付いたかの分布。"""
+    import pandas as pd
+
+    if not study:
+        return ""
+    df = pd.DataFrame(study)
+    out = ["高値・安値が「当日出来高の何%を消化した時点」で付いたか（前日比±5%以上の銘柄日）"]
+    for col, name in (("high_vol_share", "高値"), ("low_vol_share", "安値")):
+        q = df[col].quantile([0.25, 0.5, 0.75])
+        out.append(f"  {name}: 中央値 {q[0.5]:.0%}（25%〜75%の範囲 {q[0.25]:.0%}〜{q[0.75]:.0%}）")
+    early = (df["high_time"] < "09:30").mean()
+    out.append(f"  高値が9:30より前（寄り天型）: {early:.0%} / 14:30以降（引け高型）: {(df['high_time'] >= '14:30').mean():.0%}")
+    fl = df.dropna(subset=["high_float_turnover"])
+    if len(fl):
+        out.append(f"  浮動株回転率（{len(fl)}件）: 高値時 中央値 {fl['high_float_turnover'].median():.0%}"
+                   f" / 安値時 中央値 {fl['low_float_turnover'].median():.0%}")
+    return "\n".join(out)
 
 
 def inspect(path: str):
@@ -270,9 +306,11 @@ def main():
     summary = summarize(rows)
     write_csv(out / "eval.csv", rows)
     write_csv(out / "evalsum.csv", summary)
-    write_csv(out / "turnover_study.csv", turnover_study(used, known))
+    study = turnover_study(used, known)
+    write_csv(out / "turnover_study.csv", study)
     print(f"\n通知 {len(rows):,}件\n")
     print(format_summary(summary))
+    print("\n" + summarize_study(study))
     print(f"\n保存先: {out}")
 
 
