@@ -101,6 +101,7 @@ class RssConfig:
     items: dict = field(default_factory=lambda: {
         "price": "現在値", "volume": "出来高", "vwap": "VWAP", "open": "始値", "high": "高値",
         "low": "安値", "prev_close": "前日終値", "ytd_high": "年初来高値", "name": "銘柄名称",
+        "value": "売買代金",  # VWAP が取れないときは 売買代金 ÷ 出来高 で計算する
         "bid_price": "最良買気配値{i}", "bid_qty": "最良買気配数量{i}",
         "ask_price": "最良売気配値{i}", "ask_qty": "最良売気配数量{i}",
         "bid_sign": "", "ask_sign": "",  # 気配の状態（特別気配）の項目名。空なら R12 は判定しない

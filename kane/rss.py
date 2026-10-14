@@ -15,7 +15,7 @@ from .models import Snapshot
 WATCH_SHEET = "kane_watch"
 SCAN_SHEET = "kane_scan"
 
-BASE_KEYS = ["price", "volume", "vwap", "open", "high", "low", "prev_close", "ytd_high"]
+BASE_KEYS = ["price", "volume", "vwap", "value", "open", "high", "low", "prev_close", "ytd_high"]
 
 
 class RssError(RuntimeError):
@@ -38,7 +38,7 @@ def watch_fields(cfg: RssConfig) -> list[tuple[str, str]]:
 def scan_fields(cfg: RssConfig) -> list[tuple[str, str]]:
     """スキャンシートの列。軽くするため板は最良気配1本だけ。"""
     it = cfg.items
-    keys = ["price", "volume", "vwap", "high", "prev_close", "ytd_high"]
+    keys = ["price", "volume", "vwap", "value", "high", "prev_close", "ytd_high"]
     out = [(k, it[k]) for k in keys if it.get(k)]
     for k in ("bid_sign", "ask_sign"):
         if it.get(k):
@@ -87,6 +87,10 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
         return out
 
     bids, asks = levels("bid"), levels("ask")
+    vwap = val.get("vwap")
+    vol, value = val.get("volume"), val.get("value")
+    if not vwap and vol and value:
+        vwap = value / vol  # 売買代金 ÷ 出来高
 
     def sign(key):
         s = raw.get(key)
@@ -96,7 +100,7 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
 
     snap = Snapshot(
         ts=ts, symbol=code, price=price, volume=val.get("volume") or 0.0,
-        vwap=val.get("vwap"), high=val.get("high"), low=val.get("low"), open=val.get("open"),
+        vwap=vwap, high=val.get("high"), low=val.get("low"), open=val.get("open"),
         prev_close=val.get("prev_close"),
         buy5=sum(q for _, q in bids[:5]) or None, sell5=sum(q for _, q in asks[:5]) or None,
         bid=bids[0][0] if bids else None, ask=asks[0][0] if asks else None,

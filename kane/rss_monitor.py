@@ -60,6 +60,16 @@ class RssMonitor:
             print(f"\n=== {s.code} {s.name} ===")
             for (key, item), v in zip(self.wf[:12], row[:12]):
                 print(f"  {item:<14} → {v!r}")
+        empty = [item for j, (_, item) in enumerate(self.wf)
+                 if all(r[j] in (None, "") for r in rows)]
+        if empty:
+            print("\n全銘柄で空だった項目（項目名が違うか、この項目は提供されていない）:", empty)
+        vw = [k for k, _ in self.wf]
+        if "value" in vw and rows:
+            r0 = rows[0]
+            v, q = r0[vw.index("value")], r0[vw.index("volume")]
+            if isinstance(v, (int, float)) and isinstance(q, (int, float)) and q:
+                print(f"\nVWAP（売買代金÷出来高）: {self.watch[0].code} = {v / q:,.1f}")
         bad = sorted({item for row in rows for (k, item), v in zip(self.wf, row)
                       if isinstance(v, int) and v < -2_000_000_000})
         if bad:

@@ -12,7 +12,7 @@ def test_fields_and_formula():
     wf = watch_fields(cfg)
     assert wf[0] == ("price", "現在値")
     assert ("ask_qty2", "最良売気配数量2") in wf
-    assert len(scan_fields(cfg)) == 10
+    assert len(scan_fields(cfg)) == 11
     assert formula(cfg, "4498", "現在値") == '=RssMarket("4498.T","現在値")'
 
 
@@ -70,3 +70,11 @@ def test_rss_monitor_scan_filter(tmp_path):
     m.emit([Alert(TS, "9999", "R2", "5%", "b", 1000), Alert(TS, "9999", "R10", "5%段階", "c", 1000)], {"9999": big})
     m.emit([Alert(TS, "4498", "R2", "5%", "d", 1000)], {})
     assert sent == ["c", "d"]
+
+
+def test_vwap_from_value_when_missing():
+    cfg = RssConfig(board_levels=0)
+    wf = watch_fields(cfg)
+    vals = {"price": 2066, "volume": 1000, "vwap": "", "value": 2_000_000}
+    snap, _ = row_to_snapshot("4498", wf, [vals.get(k, "") for k, _ in wf], TS, [])
+    assert snap.vwap == 2000

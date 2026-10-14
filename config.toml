@@ -65,6 +65,7 @@ scan_min_value_yen = 100000000              # スキャン銘柄は売買代金1
 price = "現在値"
 volume = "出来高"
 vwap = "VWAP"
+value = "売買代金"   # VWAP が空なら 売買代金÷出来高 で計算
 open = "始値"
 high = "高値"
 low = "安値"
