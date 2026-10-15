@@ -174,3 +174,20 @@ def test_early_study_short_side_sign():
     recs, _, _ = study(bars, 1e6)
     s = [r for r in recs if r["variant"] == "S_R2_10"]
     assert len(s) == 1 and s[0]["ret_大引け"] > 0  # 下がったので「当たり」＝プラス
+
+
+def test_kisei_line_price_and_streak():
+    import numpy as np
+    import pandas as pd
+
+    from kane.kisei import daily, line_price, study
+
+    s24 = np.array([2400.0])
+    lp = line_price(s24)[0]
+    assert abs(lp / ((2400 + lp) / 25) - 1 - 0.30) < 1e-9
+    rows = []
+    for i, d in enumerate(pd.bdate_range("2026-01-05", periods=35)):
+        p = 100.0 if i < 28 else 200.0  # 29日目から急騰 → 乖離30%超えが続く
+        rows.append(("1111", d + pd.Timedelta(minutes=540), p, p, p, p, 100))
+    recs = study(daily(pd.DataFrame(rows, columns=["code", "dt", "open", "high", "low", "close", "volume"])))
+    assert [r["streak"] for r in recs if r["streak"]][:3] == [1, 2, 3]
