@@ -2,6 +2,16 @@
 
 フォルダ：`C:\Users\takuy\Desktop\08_開発案件\kane_git`
 
+## 最短の起動（bat をダブルクリック）
+| いつ | bat | やること |
+|------|-----|---------|
+| 朝（MS2にログイン → Excelで「RSS接続」のあと） | `scripts\morning.bat` | git pull → 監視を起動 |
+| 夜（大引け後） | `scripts\night.bat` | git pull → 平均出来高の更新（約30分）→ 固定銘柄の乖離ライン表示 |
+| 乖離ラインだけ見たい | `scripts\line.bat`（コードを付けると任意の銘柄：`line.bat 4498 3909`） | 30%・20%・15%ラインの株価 |
+| 検証 | `scripts\backtest.bat`（`backtest.bat kisei` / `backtest.bat backtest`） | 早期検知・規制ライン・通常の検証 |
+| 答え合わせ | `scripts\evaluate.bat` | 記録した通知の当たり率 |
+| 銘柄一覧の更新 | `scripts\universe.bat` | JPX の data_j.xls から universe.csv を作る |
+
 ## 毎日の流れ
 | いつ | やること | コマンド |
 |------|---------|---------|

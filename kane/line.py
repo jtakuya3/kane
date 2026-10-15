@@ -81,14 +81,15 @@ def fetch_closes(cfg, codes: list[str], bars: int = 40, wait: float = 60.0) -> d
     return out
 
 
-def main():
+def main(default_codes: list[str] | None = None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("codes", nargs="+")
+    ap.add_argument("codes", nargs="*" if default_codes else "+")
     ap.add_argument("--config", default="config.toml")
     args = ap.parse_args()
     cfg = load_config(args.config)
-    data = fetch_closes(cfg, args.codes)
-    for c in args.codes:
+    codes = args.codes or [s.code for s in cfg.symbols]
+    data = fetch_closes(cfg, codes)
+    for c in codes:
         print(fmt(c, analyze(data[c])) if c in data else f"■ {c}：日足が取れませんでした")
         print()
     print("※取引時間中に実行すると、今日の途中の値は使わず「今日のライン」を出す。引け後なら次の営業日のライン。")
