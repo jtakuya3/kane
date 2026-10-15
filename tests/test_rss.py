@@ -148,3 +148,13 @@ def test_write_baseline_keeps_previous(tmp_path):
     write_baseline(p, {"2222": [("2026/10/13", 100.0)] * 20})
     text = p.read_text()
     assert "1111,5,60,9,2026/01/05,old" in text and "2222,100,20,100,2026/10/13" in text
+
+
+def test_line_analyze():
+    from kane.line import analyze
+    closes = [100.0] * 30 + [140.0, 150.0]
+    r = analyze(closes)
+    p = r["next"][0.30]
+    s24 = sum(closes[-24:])
+    assert abs(p / ((s24 + p) / 25) - 1.30) < 1e-9
+    assert r["streak"] == 2 and r["after"]["30%ライン"][0] == p

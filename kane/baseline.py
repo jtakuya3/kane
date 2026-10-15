@@ -35,14 +35,14 @@ def parse_chart(table, today: date | None = None) -> list[float]:
     return [v for _, v in parse_chart_rows(table, today)]
 
 
-def parse_chart_rows(table, today: date | None = None) -> list[tuple[str, float]]:
-    """RssChart の表から（日付 YYYY/MM/DD, 出来高）を古い順に取り出す（今日の行は除く）。"""
+def parse_chart_rows(table, today: date | None = None, column: str = "出来高") -> list[tuple[str, float]]:
+    """RssChart の表から（日付 YYYY/MM/DD, column の値）を古い順に取り出す（今日の行は除く）。"""
     rows = [list(r) for r in table if r]
-    hi = next((i for i, r in enumerate(rows) if any(str(c).strip() == "出来高" for c in r)), None)
+    hi = next((i for i, r in enumerate(rows) if any(str(c).strip() == column for c in r)), None)
     if hi is None:
         return []
     header = [str(c).strip() for c in rows[hi]]
-    vi = header.index("出来高")
+    vi = header.index(column)
     di = next((i for i, h in enumerate(header) if h in ("日付", "年月日")), None)
     if today is None:
         now = datetime.now()
