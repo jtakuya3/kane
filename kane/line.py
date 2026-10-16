@@ -60,6 +60,7 @@ def fmt(code: str, r: dict) -> str:
 def fetch_closes(cfg, codes: list[str], bars: int = 40, wait: float = 60.0) -> dict:
     rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
                    else cfg.base_dir / cfg.rss.workbook)
+    print("Excel（楽天RSS）に接続中…", flush=True)
     rss.connect()
     ws = com_retry(rss._sheet, SHEET)
     com_retry(lambda: ws.Cells.Clear())
@@ -68,8 +69,11 @@ def fetch_closes(cfg, codes: list[str], bars: int = 40, wait: float = 60.0) -> d
             ws.Cells(1, 1 + j * BLOCK).Formula = chart_formula(c, bars, cfg.rss.code_suffix)
         com_retry(put)
     out, t0 = {}, time.time()
+    print(f"日足を取得中…（{len(codes)}銘柄、最大{wait:.0f}秒待つ）", flush=True)
     while len(out) < len(codes) and time.time() - t0 < wait:
         time.sleep(1.0)
+        if int(time.time() - t0) % 10 == 0:
+            print(f"  {int(time.time() - t0)}秒 取得 {len(out)}/{len(codes)}", flush=True)
         table = com_retry(lambda: ws.Range(ws.Cells(1, 1), ws.Cells(bars + 3, len(codes) * BLOCK)).Value)
         for j, c in enumerate(codes):
             if c in out:
@@ -88,7 +92,11 @@ def main(default_codes: list[str] | None = None):
     args = ap.parse_args()
     cfg = load_config(args.config)
     codes = args.codes or [s.code for s in cfg.symbols]
-    data = fetch_closes(cfg, codes)
+    try:
+        data = fetch_closes(cfg, codes)
+    except Exception as e:
+        print(f"エラー: {e}", flush=True)
+        raise
     for c in codes:
         print(fmt(c, analyze(data[c])) if c in data else f"■ {c}：日足が取れませんでした")
         print()
