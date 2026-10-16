@@ -81,6 +81,11 @@ def fetch_closes(cfg, codes: list[str], bars: int = 40, wait: float = 60.0) -> d
             rows = parse_chart_rows([r[j * BLOCK:(j + 1) * BLOCK] for r in table], column="終値")
             if len(rows) >= 26:
                 out[c] = [v for _, v in rows]
+    if len(out) < len(codes):
+        first = com_retry(lambda: ws.Range(ws.Cells(1, 1), ws.Cells(3, 3)).Value)
+        print(f"  取れなかった銘柄のセルの中身（1〜3行目）: {first}", flush=True)
+        print("  「接続待ち」のまま→MS2とRSSの接続が切れている（MS2に再ログイン→ExcelでRSS接続）。"
+              "#NAME?→RSSアドインが読み込まれていない。空→Excelが再計算していない", flush=True)
     com_retry(lambda: ws.Cells.Clear())
     return out
 
