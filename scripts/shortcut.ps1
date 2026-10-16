@@ -1,4 +1,4 @@
-# デスクトップに bat のショートカットを作る
+﻿# デスクトップに bat のショートカットを作る
 param([string]$Src)
 $d = [Environment]::GetFolderPath('Desktop')
 $w = New-Object -ComObject WScript.Shell
