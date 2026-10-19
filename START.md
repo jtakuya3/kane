@@ -65,3 +65,6 @@ py -3.11 -m kane.monitor
 - `alerts_日付.csv`（通知）
 - `bars_日付.csv`（1分足）
 - `baseline.csv`（平均出来高）
+
+## 運用ルール
+- 浮動株（流通株）を調べた銘柄は、推定値でも必ず `symbols.csv` に追加する（`float_shares`・`issued_shares`）。推定は大株主からの逆算で、公式値が分かったら上書きする。
