@@ -10,7 +10,7 @@
 | 朝（MS2にログイン → Excelで「RSS接続」のあと） | `scripts\morning.bat` | git pull → 監視を起動 |
 | 夜（大引け後） | `scripts\night.bat` | git pull → 平均出来高の更新（約30分）→ 固定銘柄＋追加銘柄（bat 内の `EXTRA`）の乖離ライン表示 |
 | 乖離ラインだけ見たい | `scripts\line.bat`（コードを付けると任意の銘柄：`line.bat 4498 3909`） | 30%・20%・15%ラインの株価 |
-| 検証 | `scripts\backtest.bat`（`backtest.bat kisei` / `backtest.bat backtest`） | 早期検知・規制ライン・通常の検証 |
+| 検証 | `scripts\backtest.bat`（`backtest.bat kisei` / `backtest.bat float` / `backtest.bat backtest`） | 早期検知・規制ライン・浮動株回転率・通常の検証 |
 | 答え合わせ | `scripts\evaluate.bat` | 記録した通知の当たり率 |
 | 銘柄一覧の更新 | `scripts\universe.bat` | JPX の data_j.xls から universe.csv を作る |
 

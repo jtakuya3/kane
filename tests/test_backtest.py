@@ -191,3 +191,30 @@ def test_kisei_line_price_and_streak():
         rows.append(("1111", d + pd.Timedelta(minutes=540), p, p, p, p, 100))
     recs = study(daily(pd.DataFrame(rows, columns=["code", "dt", "open", "high", "low", "close", "volume"])))
     assert [r["streak"] for r in recs if r["streak"]][:3] == [1, 2, 3]
+
+
+def test_float_study_tables():
+    import pandas as pd
+    from kane.float_study import daily_table, intraday_records, bucket, DAY_BUCKETS, report
+
+    assert bucket(0.35, DAY_BUCKETS) == "30〜50%"
+    assert bucket(5.0, DAY_BUCKETS) == "200%以上"
+    rows = []
+    price = 100.0
+    for d in range(8):
+        day = pd.Timestamp("2026-03-02") + pd.Timedelta(days=d)
+        for i in range(78):
+            t = day + pd.Timedelta(minutes=9 * 60 + 5 * i)
+            price *= 1.001 if i < 40 else 0.999
+            rows.append({"code": "1111", "dt": t, "open": price, "high": price * 1.002, "low": price * 0.998,
+                         "close": price, "volume": 1000 + (5000 if d == 3 else 0)})
+    b = pd.DataFrame(rows)
+    b["day"] = b["dt"].dt.normalize()
+    d = daily_table(b, flt=200_000)
+    assert len(d) == 8 and d.loc[3, "turn"] > d.loc[2, "turn"]
+    peaks, events = intraday_records(b, d, 200_000, "1111")
+    assert len(peaks) == 7  # 初日は前日終値がない
+    assert all(0 <= p["high_frac_of_day_turn"] <= 1 for p in peaks)
+    d["code"] = "1111"
+    text, tables = report(d, peaks, events)
+    assert "A)" in text and "E)" in text
