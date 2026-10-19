@@ -121,6 +121,7 @@ class SymbolInfo:
     avg_vol: float | None = None  # 過去60営業日の平均日出来高（baseline.csv）
     ytd_max_vol: float | None = None  # 今年の最大日出来高（前日まで）
     ytd_max_date: str = ""
+    loan: str = ""  # 貸借区分：1＝貸借銘柄（空売り可）、0＝信用銘柄（制度信用の売りなし）、空＝未確認
 
 
 @dataclass
@@ -204,6 +205,7 @@ def load_symbols(path: Path) -> list[SymbolInfo]:
                     issued_shares=num("issued_shares"),
                     ytd_high=num("ytd_high"),
                     group=(row.get("group") or "").strip(),
+                    loan=(row.get("loan") or "").strip(),
                 )
             )
     return out

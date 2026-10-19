@@ -10,7 +10,9 @@
     その時点で既に高値を付けていた割合
  D) 連日の累計回転率（回転率10%以上の日が続く「相場」の中での累計）と、天井日の位置
  E) 銘柄ごとの要約
-浮動株は symbols.csv の float_shares（推定値を含む）。発行済（issued_shares）があれば発行済ベースの回転率も出す。
+浮動株は symbols.csv の float_shares（推定値を含む）。
+symbols.csv の loan（1＝貸借銘柄、0＝信用銘柄）があれば、A〜D を貸借／非貸借で分けても出す
+（貸借銘柄は空売りの買い戻しがあるぶん、回転率と天井の関係が変わる可能性があるため）。
 """
 from __future__ import annotations
 
@@ -129,7 +131,31 @@ def pct(x, signed=True):
     return "-" if x != x else (f"{x:+.2%}" if signed else f"{x:.0%}")
 
 
-def report(days: pd.DataFrame, peaks: list[dict], events: list[dict]) -> tuple[str, dict]:
+LOAN_NAME = {"1": "貸借銘柄", "0": "信用銘柄（非貸借）", "": "区分未確認"}
+
+
+def report_by_loan(days: pd.DataFrame, peaks: list[dict], events: list[dict], loan: dict) -> str:
+    """貸借区分ごとに A〜D を出し直す（区分が2つ以上あるときだけ）。"""
+    pk, ev = pd.DataFrame(peaks), pd.DataFrame(events)
+    groups = sorted({loan.get(c, "") for c in days["code"].unique()}, key=lambda x: {"1": 0, "0": 1}.get(x, 2))
+    if len(groups) < 2:
+        return "（貸借区分が1種類しかないので、区分別の比較は省略）"
+    out = ["＝＝ 貸借区分別（symbols.csv の loan 列。1＝貸借、0＝信用のみ） ＝＝"]
+    for g in groups:
+        codes = [c for c in days["code"].unique() if loan.get(c, "") == g]
+        d = days[days["code"].isin(codes)]
+        p = [r for r in peaks if r["code"] in codes]
+        e = [r for r in events if r["code"] in codes]
+        if d.empty:
+            continue
+        out.append("")
+        out.append(f"■ {LOAN_NAME.get(g, g)}：{len(codes)}銘柄 {', '.join(codes)}")
+        text, _ = report(d, p, e, include_e=False)
+        out.append(text)
+    return "\n".join(out)
+
+
+def report(days: pd.DataFrame, peaks: list[dict], events: list[dict], include_e: bool = True) -> tuple[str, dict]:
     out, tables = [], {}
     # A
     out += ["A) 1日の浮動株回転率の区分ごと（全銘柄日）",
@@ -231,6 +257,8 @@ def report(days: pd.DataFrame, peaks: list[dict], events: list[dict]) -> tuple[s
                    f"相場全体の累計 中央 {pct(_q(t['total_run_turn'], .5), False)}")
     tables["D_runs"] = tops
     out.append("")
+    if not include_e:
+        return "\n".join(out), tables
     # E
     out += ["E) 銘柄ごと", f"{'コード':<7}{'日数':>5}{'平均回転率':>10}{'最大':>8}{'+10%日':>7}{'高値時点回転率(中央)':>20}"]
     rows = []
@@ -255,6 +283,7 @@ def main():
     args = ap.parse_args()
     cfg = load_config(args.config)
     floats = {s.code: s.float_shares for s in cfg.symbols if s.float_shares}
+    loan = {s.code: s.loan for s in cfg.symbols}
     if args.codes:
         floats = {c: f for c, f in floats.items() if c in set(args.codes)}
     if not floats:
@@ -278,7 +307,9 @@ def main():
         events += e
         print(f"{code}: {len(d)}日 浮動株 {flt:,.0f} 平均回転率 {d['turn'].mean():.0%} 最大 {d['turn'].max():.0%}")
     days = pd.concat(all_days, ignore_index=True)
+    days["loan"] = days["code"].map(loan)
     text, tables = report(days, peaks, events)
+    text += "\n\n" + report_by_loan(days, peaks, events, loan)
     out = cfg.data_dir / f"float_{datetime.now():%Y%m%d_%H%M}"
     out.mkdir(parents=True, exist_ok=True)
     days.assign(day=days["day"].astype(str).str[:10]).to_csv(out / "float_days.csv", index=False, encoding="utf-8-sig")
