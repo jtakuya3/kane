@@ -246,10 +246,15 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
             continue
         walls[(side, p)] = {"peak": q, "last": q, "eaten": 0.0, "cancel": 0.0, "warned": False,
                             "since": s.ts, "med": med}
-        if (cfg.wall_notify_appear and lo <= p <= hi and prev.get(p, 0) < q * cfg.wall_new_ratio
-                and st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec)):
+        if cfg.wall_notify_appear and st.cooled(("R13", side, p), s.ts, cfg.wall_cooldown_sec):
+            if lo <= p <= hi:
+                if prev.get(p, 0) >= q * cfg.wall_new_ratio:
+                    continue  # さっきから同じ量で並んでいた（急に出たのではない）
+                what = "出た"
+            else:
+                what = "見える範囲に入った"  # 板の表示範囲の外にあった大口板が、株価が動いて見えるようになった
             out.append(_card(st, s, "R13", side, [
-                f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）",
+                f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）が{what}",
                 f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{p / s.price - 1:+.2%}",
             ], cfg, wall_price=p, wall_qty=q, wall_mult=q / med))
 

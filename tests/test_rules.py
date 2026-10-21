@@ -169,14 +169,15 @@ def test_r13_default_requires_50m_yen():
     assert len(rules_of(a, "R13")) == 1
 
 
-def test_r13_ignores_wall_scrolling_into_view():
-    """株価が動いて、前からあった大口板が見える範囲に入ってきただけなら通知しない。"""
+def test_r13_reports_wall_scrolling_into_view():
+    """株価が動いて、前からあった大口板が見える範囲に入ってきたときは「見える範囲に入った」として通知する。"""
     e = eng(float_shares=None, wall_min_yen=3_000_000, wall_notify_appear=True)
     # 売り板を2円上にずらす：前の範囲(1991〜2010)の外にある2011円の3万株が新たに見える
     shifted_sell = [(2003 + i, 1500 + i * 100) for i in range(9)] + [(2011, 30_000)]
     shifted_buy = [(2002 - i, 1000 + i * 100) for i in range(10)]
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, shifted_buy, shifted_sell, 2002)])
-    assert not rules_of(a, "R13")
+    r = rules_of(a, "R13")
+    assert len(r) == 1 and "見える範囲に入った" in r[0].message and r[0].extra["wall_price"] == 2011
 
 
 def test_r2_needs_8pct_and_rvol20():
