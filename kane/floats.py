@@ -44,8 +44,20 @@ def main():
     ap.add_argument("--live", action="store_true", help="楽天RSSから今日の出来高を読んで回転率を出す")
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--no-open", action="store_true", help="HTML をブラウザで開かない")
+    ap.add_argument("--every", type=int, default=0, help="秒。指定すると、この間隔で latest.html を更新し続ける（Ctrl+C で終了）")
     args = ap.parse_args()
     cfg = load_config(args.config)
+    if args.live and args.every > 0:
+        first = True
+        while True:
+            measured = datetime.now()
+            live = fetch_live(cfg, [s.code for s in cfg.symbols])
+            out = write_html(cfg, live, measured, refresh=args.every)
+            print(f"{measured:%H:%M:%S} 更新 {len(live)}/{len(cfg.symbols)}銘柄 → {out.parent / 'latest.html'}", flush=True)
+            if first and not args.no_open and sys.platform.startswith("win"):
+                os.startfile(out.parent / "latest.html")  # noqa: S606
+                first = False
+            time.sleep(args.every)
     measured = datetime.now()
     live = fetch_live(cfg, [s.code for s in cfg.symbols]) if args.live else {}
     head = f"{'コード':<6}{'銘柄':<16}{'浮動株':>12}{'発行済':>13}{'浮動比':>7}{'貸借':>5}"
@@ -82,7 +94,7 @@ def main():
 FLOAT_HI, ISSUED_HI = 0.45, 0.90  # ハイライトの水準
 
 
-def write_html(cfg, live: dict, measured: datetime) -> Path:
+def write_html(cfg, live: dict, measured: datetime, refresh: int = 0) -> Path:
     """計測時刻つきの一覧を HTML に書く。浮動株回転率 45% 以上・発行済比 90% 以上を強調。"""
     rows = []
     for s in cfg.symbols:
@@ -121,7 +133,8 @@ def write_html(cfg, live: dict, measured: datetime) -> Path:
             + td(pct(ft), f"num {ft_cls}") + td(pct(it, 1), "num")
             + td(f"{v['value'] * cfg.rss.value_unit / 1e8:,.1f}億" if v.get("value") else "-", "num")
             + "</tr>")
-    doc = f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
+    meta_refresh = f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ""
+    doc = f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">{meta_refresh}
 <title>浮動株回転率 {measured:%Y-%m-%d %H:%M}</title>
 <style>
 body{{font-family:"Yu Gothic UI","Meiryo",sans-serif;margin:16px;background:#fff;color:#222}}
@@ -134,7 +147,7 @@ td.up{{color:#c62828}} td.down{{color:#1565c0}}
 .legend span{{display:inline-block;padding:2px 8px;margin-right:8px;border:1px solid #ccc}}
 </style></head><body>
 <h1>浮動株回転率（今日の出来高 ÷ 浮動株）</h1>
-<div class="meta">計測時刻 <b>{measured:%Y-%m-%d %H:%M:%S}</b>（楽天RSS の値。出来高は当日累計）　
+<div class="meta">計測時刻 <b>{measured:%Y-%m-%d %H:%M:%S}</b>（楽天RSS の値。出来高は当日累計{'。' + str(refresh) + '秒ごとに自動更新' if refresh else ''}）　
 <span class="legend"><span style="background:#fff3b0">浮動株回転率 {FLOAT_HI:.0%} 以上</span><span style="background:#ffd1d1">発行済比 {ISSUED_HI:.0%} 以上</span>
 <span style="color:#ef6c00;font-weight:bold">13%以上＝大きく上げた日の高値の中央値</span> <span style="color:#c62828;font-weight:bold">30%以上＝利確の目安</span></span></div>
 <table><thead><tr><th>コード</th><th>銘柄</th><th>区分</th><th>浮動株</th><th>発行済</th><th>浮動比</th><th>貸借</th>
