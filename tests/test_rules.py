@@ -277,13 +277,14 @@ def test_r13_ladder_appears_and_disappears():
 def test_r13_depth_jump_up_and_down():
     """買い板の総量が1回の更新で30%以上増えたら「急増」、引っ込めたら「急減」。"""
     e = eng(float_shares=None, wall_notify_appear=False, depth_jump_min_yen=10_000_000)
-    base_buy = [(2000 - i, 15_000 + i * 1_000) for i in range(10)]  # 合計19.5万株（連なりにならない量）
+    q = [3000, 9000, 4000, 12000, 5000, 8000, 6000, 11000, 7000, 10000]  # ばらばらの量（連なりにならない）。合計7.5万株
+    base_buy = [(2000 - i, q[i]) for i in range(10)]
     jump_buy = list(base_buy)
-    jump_buy[8] = (1992, 103_000)  # 奥の段に急に+8万株（+41%）
+    jump_buy[8] = (1992, 37_000)  # 奥の段に急に+3万株（+40%）
     a = run(e, [board_snap(0, base_buy, NORMAL_SELL), board_snap(1, jump_buy, NORMAL_SELL)])
     r = rules_of(a, "R13")
     assert [x.level for x in r] == ["買い板急増"]
-    assert "1992円 +80,000株" in r[0].message and r[0].extras["depth_delta"] == 80_000
+    assert "1992円 +30,000株" in r[0].message and r[0].extras["depth_delta"] == 30_000
     a2 = run(e, [board_snap(2, base_buy, NORMAL_SELL)])
     r2 = rules_of(a2, "R13")
     assert [x.level for x in r2] == ["買い板急減"]
