@@ -177,7 +177,7 @@ def test_r13_reports_wall_scrolling_into_view():
     shifted_buy = [(2002 - i, 1000 + i * 100) for i in range(10)]
     a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, shifted_buy, shifted_sell, 2002)])
     r = rules_of(a, "R13")
-    assert len(r) == 1 and "見える範囲に入った" in r[0].message and r[0].extra["wall_price"] == 2011
+    assert len(r) == 1 and "見える範囲に入った" in r[0].message and r[0].extras["wall_price"] == 2011
 
 
 def test_r2_needs_8pct_and_rvol20():
