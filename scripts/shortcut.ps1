@@ -8,6 +8,7 @@ $list = @(
   @('kane ライン', 'line.bat'),
   @('kane 検証', 'backtest.bat'),
   @('kane 浮動株検証', 'backtest_float.bat'),
+  @('kane 回転率いま', 'floats_live.bat'),
   @('kane 答え合わせ', 'evaluate.bat')
 )
 foreach ($p in $list) {
