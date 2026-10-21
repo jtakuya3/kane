@@ -266,7 +266,7 @@ def test_r13_ladder_appears_and_disappears():
                 board_snap(2, ladder_buy, NORMAL_SELL)])
     r = rules_of(a, "R13")
     assert len(r) == 1 and r[0].level == "買い連なり板" and r[0].extras["ladder_n"] == 4
-    assert "1,991〜1,994円" in r[0].message and "10,000株×4段" in r[0].message
+    assert "1991〜1994円" in r[0].message and "10,000株×4段" in r[0].message
     gone_buy = [(2000 - i, 1000 + i * 100) for i in range(6)] + [(1994, 10000), (1993, 500), (1992, 300), (1991, 200)]
     a2 = run(e, [board_snap(3, gone_buy, NORMAL_SELL)])
     r2 = rules_of(a2, "R13")
