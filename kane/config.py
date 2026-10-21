@@ -41,6 +41,9 @@ class RuleConfig:
     ladder_tol: float = 0.15  # 連なり板：各段の量の差がこの割合以内なら「同じ量」
     ladder_mult: float = 5.0  # 連なり板：各段が周りの板（中央値）の何倍以上か
     ladder_min_yen: float = 20_000_000  # 連なり板：合計金額の下限（2,000万円）
+    depth_jump_ratio: float = 0.3  # 板の総量が1回の更新でこの割合以上 増えた／減ったら通知（同じ値段どうしで比較）
+    depth_jump_min_yen: float = 20_000_000  # 増減分の金額の下限（2,000万円）
+    depth_cooldown_sec: int = 120  # 同じ側の総量通知は2分に1回まで
     # R14 ストップ高の剥がれ
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10

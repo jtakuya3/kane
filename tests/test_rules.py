@@ -12,6 +12,7 @@ FLAT = [[0, 0.0], [1, 1.0], [390, 1.0]]  # テスト用：9:01以降は「1日�
 
 def eng(float_shares=1_000_000, vol5m=None, avg_vol=None, **rules):
     rules.setdefault("volume_profile", FLAT)
+    rules.setdefault("depth_jump_min_yen", 10 ** 12)  # 板の総量の通知は、専用のテスト以外では切る
     return Engine([SymbolInfo("TEST", "テスト", float_shares, vol5m, avg_vol=avg_vol)], RuleConfig(**rules))
 
 
@@ -271,3 +272,18 @@ def test_r13_ladder_appears_and_disappears():
     a2 = run(e, [board_snap(3, gone_buy, NORMAL_SELL)])
     r2 = rules_of(a2, "R13")
     assert len(r2) == 1 and r2[0].level == "買い連なり板剥がれ"
+
+
+def test_r13_depth_jump_up_and_down():
+    """買い板の総量が1回の更新で30%以上増えたら「急増」、引っ込めたら「急減」。"""
+    e = eng(float_shares=None, wall_notify_appear=False, depth_jump_min_yen=10_000_000)
+    base_buy = [(2000 - i, 15_000 + i * 1_000) for i in range(10)]  # 合計19.5万株（連なりにならない量）
+    jump_buy = list(base_buy)
+    jump_buy[8] = (1992, 103_000)  # 奥の段に急に+8万株（+41%）
+    a = run(e, [board_snap(0, base_buy, NORMAL_SELL), board_snap(1, jump_buy, NORMAL_SELL)])
+    r = rules_of(a, "R13")
+    assert [x.level for x in r] == ["買い板急増"]
+    assert "1992円 +80,000株" in r[0].message and r[0].extras["depth_delta"] == 80_000
+    a2 = run(e, [board_snap(2, base_buy, NORMAL_SELL)])
+    r2 = rules_of(a2, "R13")
+    assert [x.level for x in r2] == ["買い板急減"]

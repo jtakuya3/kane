@@ -281,6 +281,39 @@ def _ladders(st: SymbolState, s: Snapshot, cfg: RuleConfig, cur_buy, cur_sell, q
     return out
 
 
+def _depth_jump(st: SymbolState, s: Snapshot, cfg: RuleConfig, prev: dict, cur_buy, cur_sell) -> list[Alert]:
+    """板の総量（10本の合計）が1回の更新で急に増えた／減ったら知らせる。
+
+    株価が動いて見える範囲がずれた分は比べられないので、前回と今回の両方にある値段だけで比較する。
+    どの値段で増えた（減った）かを量の多い順に示す。
+    """
+    out = []
+    for side, book in (("買い", dict(cur_buy)), ("売り", dict(cur_sell))):
+        common = [p for p in book if p in prev]
+        if len(common) < 5:
+            continue
+        before = sum(prev[p] for p in common)
+        after = sum(book[p] for p in common)
+        if before <= 0:
+            continue
+        delta = after - before
+        if abs(delta) < before * cfg.depth_jump_ratio or abs(delta) * s.price < cfg.depth_jump_min_yen:
+            continue
+        if not st.cooled(("R13depth", side, delta > 0), s.ts, cfg.depth_cooldown_sec):
+            continue
+        changes = sorted(((book[p] - prev[p], p) for p in common), key=lambda x: -abs(x[0]))
+        changes = [(d, p) for d, p in changes if (d > 0) == (delta > 0) and abs(d) >= abs(delta) * 0.1][:4]
+        where = "、".join(f"{_yen(p)}円 {d:+,.0f}株" for d, p in changes)
+        kind = "急増" if delta > 0 else "急減"
+        hint = ("買い支えが入った" if side == "買い" else "上値に蓋") if delta > 0 else \
+               ("買い支えを引っ込めた（下に抜けやすい）" if side == "買い" else "売り物を引っ込めた（上に抜けやすい）")
+        out.append(_card(st, s, "R13", f"{side}板{kind}", [
+            f"{side}板の総量が{kind}：{before:,.0f}株 → {after:,.0f}株（{delta:+,.0f}株、約{abs(delta) * s.price / 1e4:,.0f}万円）  {hint}",
+            f"増減の場所：{where}  現在値 {_yen(s.price)}円",
+        ], cfg, depth_before=before, depth_after=after, depth_delta=delta))
+    return out
+
+
 def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     """大口板を見張り、剥がれそうな予兆（ピークから減り始めた）と剥がれ（消えた・突き抜けた）を知らせる。
 
@@ -329,6 +362,8 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
 
     # 1b) 連なり板：同じ量の板が値段の連続する段に並ぶ（同じ人の意図的な注文とみなす）
     out += _ladders(st, s, cfg, cur_buy, cur_sell, qtys, traded)
+    # 1c) 板の総量の急増・急減（どこか1〜数段にポッと大口が出た／引っ込めた）
+    out += _depth_jump(st, s, cfg, prev, cur_buy, cur_sell)
 
     # 2) 見張り中の大口板の減り方を見る
     for (side, p), w in list(walls.items()):
