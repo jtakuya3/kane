@@ -212,6 +212,75 @@ def _is_wall(side, p, q, qtys, cfg):
     return bool(med) and q >= med * cfg.wall_mult and p * q >= cfg.wall_min_yen, med
 
 
+def _find_ladders(levels: list[tuple[float, float]], qtys: list[float], cfg: RuleConfig) -> list[dict]:
+    """片側の板（最良から順）から、同じ量が連続して並ぶ区間を見つける。"""
+    out, i, n = [], 0, len(levels)
+    med_all = sorted(qtys)[len(qtys) // 2] if qtys else 0
+    while i < n:
+        j = i
+        base = levels[i][1]
+        while j + 1 < n and base > 0 and abs(levels[j + 1][1] - base) <= base * cfg.ladder_tol:
+            j += 1
+        if j - i + 1 >= cfg.ladder_levels:
+            seg = levels[i:j + 1]
+            others = [q for q in qtys if q not in {q2 for _, q2 in seg}] or [med_all]
+            med = sorted(others)[len(others) // 2]
+            total_yen = sum(p * q for p, q in seg)
+            if med and base >= med * cfg.ladder_mult and total_yen >= cfg.ladder_min_yen:
+                out.append({"prices": [p for p, _ in seg], "qty": base, "n": len(seg), "yen": total_yen, "med": med})
+        i = j + 1
+    return out
+
+
+def _ladders(st: SymbolState, s: Snapshot, cfg: RuleConfig, cur_buy, cur_sell, qtys, traded) -> list[Alert]:
+    v = st.vars
+    watched = v.setdefault("ladders", {})  # (側, 先頭の値段, 本数) → {qty, prices, warned}
+    out = []
+    seen = set()
+    for side, book in (("買い", cur_buy), ("売り", cur_sell)):
+        for lad in _find_ladders(book, qtys, cfg):
+            key = (side, lad["prices"][0], lad["n"])
+            seen.add(key)
+            if key in watched:
+                continue
+            # 同じ区間が本数違いで既に見張り中なら、更新だけ
+            if any(k[0] == side and set(watched[k]["prices"]) & set(lad["prices"]) for k in watched):
+                continue
+            watched[key] = {"qty": lad["qty"], "prices": lad["prices"], "gone": 0}
+            if st.cooled(("R13ladder", side, lad["prices"][0]), s.ts, cfg.wall_cooldown_sec):
+                lo, hi = min(lad["prices"]), max(lad["prices"])
+                out.append(_card(st, s, "R13", f"{side}連なり板", [
+                    f"連なり{side}板 {_yen(lo)}〜{_yen(hi)}円に {lad['qty']:,.0f}株×{lad['n']}段（合計約{lad['yen'] / 1e4:,.0f}万円）が出た",
+                    f"各段は周りの板の約{lad['qty'] / lad['med']:.0f}倍（中央値{lad['med']:,.0f}株）。同じ人の意図的な注文の可能性  "
+                    f"現在値 {_yen(s.price)}円から{lo / s.price - 1:+.2%}〜{hi / s.price - 1:+.2%}",
+                ], cfg, ladder_prices=lad["prices"], ladder_qty=lad["qty"], ladder_n=lad["n"]))
+    # 消えたか：見張り中の連なりの各段が半分未満になった段が過半数なら「消えた」
+    books = {"買い": dict(cur_buy), "売り": dict(cur_sell)}
+    for key, w in list(watched.items()):
+        side = key[0]
+        book = books[side]
+        if not book:
+            continue
+        best = max(book) if side == "買い" else min(book)
+        far = min(book) if side == "買い" else max(book)
+        inside = [p for p in w["prices"] if (far <= p <= best if side == "買い" else best <= p <= far)]
+        if not inside:
+            del watched[key]  # 見えなくなった（判断できない）
+            continue
+        remaining = [p for p in inside if book.get(p, 0) >= w["qty"] * 0.5]
+        passed = [p for p in w["prices"] if (p > best if side == "買い" else p < best)]
+        if len(remaining) * 2 <= len(w["prices"]):
+            del watched[key]
+            lo, hi = min(w["prices"]), max(w["prices"])
+            how = "突き抜けた" if passed else ("約定で食われた可能性" if traded >= w["qty"] else "取り消しの可能性")
+            hint = "上に抜けやすい" if side == "売り" else "下に抜けやすい"
+            out.append(_card(st, s, "R13", f"{side}連なり板剥がれ", [
+                f"連なり{side}板 {_yen(lo)}〜{_yen(hi)}円 {w['qty']:,.0f}株×{len(w['prices'])}段 が消えた（{how}） {hint}",
+                f"残っている段 {len(remaining)}/{len(w['prices'])}  現在値 {_yen(s.price)}円",
+            ], cfg, ladder_prices=w["prices"], ladder_qty=w["qty"]))
+    return out
+
+
 def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     """大口板を見張り、剥がれそうな予兆（ピークから減り始めた）と剥がれ（消えた・突き抜けた）を知らせる。
 
@@ -257,6 +326,9 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
                 f"大口{side}板 {_yen(p)}円 {q:,.0f}株（約{p * q / 1e4:,.0f}万円）が{what}",
                 f"周りの板の約{q / med:.0f}倍（中央値{med:,.0f}株）  現在値 {_yen(s.price)}円から{p / s.price - 1:+.2%}",
             ], cfg, wall_price=p, wall_qty=q, wall_mult=q / med))
+
+    # 1b) 連なり板：同じ量の板が値段の連続する段に並ぶ（同じ人の意図的な注文とみなす）
+    out += _ladders(st, s, cfg, cur_buy, cur_sell, qtys, traded)
 
     # 2) 見張り中の大口板の減り方を見る
     for (side, p), w in list(walls.items()):

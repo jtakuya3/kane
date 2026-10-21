@@ -256,3 +256,18 @@ def test_r15_record_without_pace_suppresses_later_pace():
     e = Engine([SymbolInfo("TEST", "テスト", None, ytd_max_vol=1_000)], RuleConfig(volume_profile=FLAT))
     a = run(e, [Snapshot(T0.replace(minute=6), "TEST", 100, 2_000), Snapshot(T0.replace(minute=7), "TEST", 100, 3_000)])
     assert [x.level for x in rules_of(a, "R15")] == ["年初来更新"]
+
+
+def test_r13_ladder_appears_and_disappears():
+    """同じ量の板が4段連なって出たら「連なり板」、過半数が消えたら「剥がれ」。"""
+    e = eng(float_shares=None, wall_notify_appear=False, ladder_min_yen=20_000_000)
+    ladder_buy = [(2000 - i, 1000 + i * 100) for i in range(6)] + [(1994 - i, 10000) for i in range(4)]
+    a = run(e, [board_snap(0, NORMAL_BUY, NORMAL_SELL), board_snap(1, ladder_buy, NORMAL_SELL),
+                board_snap(2, ladder_buy, NORMAL_SELL)])
+    r = rules_of(a, "R13")
+    assert len(r) == 1 and r[0].level == "買い連なり板" and r[0].extras["ladder_n"] == 4
+    assert "1,991〜1,994円" in r[0].message and "10,000株×4段" in r[0].message
+    gone_buy = [(2000 - i, 1000 + i * 100) for i in range(6)] + [(1994, 10000), (1993, 500), (1992, 300), (1991, 200)]
+    a2 = run(e, [board_snap(3, gone_buy, NORMAL_SELL)])
+    r2 = rules_of(a2, "R13")
+    assert len(r2) == 1 and r2[0].level == "買い連なり板剥がれ"

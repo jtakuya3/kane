@@ -37,6 +37,10 @@ class RuleConfig:
     wall_gone_ratio: float = 0.2  # この割合以下（または値段を突き抜けた）で「剥がれ」
     wall_notify_appear: bool = False  # 大口板が出たこと自体も通知するか
     wall_notify_gone: bool = True  # 剥がれ（消えた・突き抜けた）も通知するか
+    ladder_levels: int = 3  # 連なり板：同じ量の板がこの本数以上、値段が連続して並んだら通知
+    ladder_tol: float = 0.15  # 連なり板：各段の量の差がこの割合以内なら「同じ量」
+    ladder_mult: float = 5.0  # 連なり板：各段が周りの板（中央値）の何倍以上か
+    ladder_min_yen: float = 20_000_000  # 連なり板：合計金額の下限（2,000万円）
     # R14 ストップ高の剥がれ
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10
