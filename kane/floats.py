@@ -17,26 +17,45 @@ LOAN = {"1": "貸借", "0": "信用", "": "未確認"}
 FIELDS = [("price", "現在値"), ("prev_close", "前日終値"), ("volume", "出来高"), ("value", "売買代金")]
 
 
-def fetch_live(cfg, codes: list[str], wait: float = 20.0) -> dict:
-    from .rss import ExcelRss, com_retry, num
+class LiveReader:
+    """楽天RSSに一度だけ式を書き、以後は読むだけ（毎回書き直すと新しい銘柄の配信が間に合わない）。"""
 
-    rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
-                   else cfg.base_dir / cfg.rss.workbook)
-    rss.connect()
-    rss.setup("floats", codes, FIELDS)
-    out, t0 = {}, time.time()
-    while time.time() - t0 < wait:
-        time.sleep(1.0)
-        rows = rss.read("floats", len(codes), len(FIELDS))
-        out = {}
-        for c, r in zip(codes, rows):
-            vals = {k: num(v) for (k, _), v in zip(FIELDS, r)}
-            if vals.get("volume") is not None:
-                out[c] = vals
-        if len(out) == len(codes):
-            break
-    com_retry(lambda: rss._sheet("floats").Cells.Clear())
-    return out
+    def __init__(self, cfg, codes: list[str]):
+        from .rss import ExcelRss
+
+        self.cfg, self.codes = cfg, codes
+        self.rss = ExcelRss(cfg.rss, Path(cfg.rss.workbook) if Path(cfg.rss.workbook).is_absolute()
+                            else cfg.base_dir / cfg.rss.workbook)
+        self.rss.connect()
+        self.rss.setup("floats", codes, FIELDS)
+
+    def read(self, wait: float = 20.0) -> dict:
+        from .rss import num
+
+        out, t0 = {}, time.time()
+        while True:
+            rows = self.rss.read("floats", len(self.codes), len(FIELDS))
+            out = {}
+            for c, r in zip(self.codes, rows):
+                vals = {k: num(v) for (k, _), v in zip(FIELDS, r)}
+                if vals.get("volume") is not None:
+                    out[c] = vals
+            if len(out) == len(self.codes) or time.time() - t0 >= wait:
+                return out
+            time.sleep(1.0)
+
+    def close(self):
+        from .rss import com_retry
+
+        com_retry(lambda: self.rss._sheet("floats").Cells.Clear())
+
+
+def fetch_live(cfg, codes: list[str], wait: float = 60.0) -> dict:
+    r = LiveReader(cfg, codes)
+    try:
+        return r.read(wait)
+    finally:
+        r.close()
 
 
 def main():
@@ -48,16 +67,33 @@ def main():
     args = ap.parse_args()
     cfg = load_config(args.config)
     if args.live and args.every > 0:
+        reader = LiveReader(cfg, [s.code for s in cfg.symbols])
         first = True
-        while True:
-            measured = datetime.now()
-            live = fetch_live(cfg, [s.code for s in cfg.symbols])
-            out = write_html(cfg, live, measured, refresh=args.every)
-            print(f"{measured:%H:%M:%S} 更新 {len(live)}/{len(cfg.symbols)}銘柄 → {out.parent / 'latest.html'}", flush=True)
-            if first and not args.no_open and sys.platform.startswith("win"):
-                os.startfile(out.parent / "latest.html")  # noqa: S606
+        try:
+            while True:
+                measured = datetime.now()
+                try:
+                    live = reader.read(wait=60.0 if first else 15.0)
+                except Exception as e:  # Excel が一時的に応答しない等。次の周期でやり直す
+                    print(f"{measured:%H:%M:%S} 読み取り失敗（次回に再試行）: {e}", flush=True)
+                    time.sleep(args.every)
+                    continue
+                out = write_html(cfg, live, measured, refresh=args.every)
+                missing = [c for c in reader.codes if c not in live]
+                print(f"{measured:%H:%M:%S} 更新 {len(live)}/{len(cfg.symbols)}銘柄 → {out.parent / 'latest.html'}"
+                      + (f"  未取得: {' '.join(missing)}" if missing else ""), flush=True)
+                if first and not args.no_open and sys.platform.startswith("win"):
+                    os.startfile(out.parent / "latest.html")  # noqa: S606
                 first = False
-            time.sleep(args.every)
+                time.sleep(args.every)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            try:
+                reader.close()
+            except Exception:
+                pass
+        return
     measured = datetime.now()
     live = fetch_live(cfg, [s.code for s in cfg.symbols]) if args.live else {}
     head = f"{'コード':<6}{'銘柄':<16}{'浮動株':>12}{'発行済':>13}{'浮動比':>7}{'貸借':>5}"

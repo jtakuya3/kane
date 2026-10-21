@@ -172,17 +172,25 @@ class ExcelRss:
             self.wb.SaveAs(target, 51)  # 51 = .xlsx
 
     def _sheet(self, name: str):
-        # 名前で直接取る（Worksheets を順に回すと、別のプロセスがシートを触っている最中に
-        # 「例外が発生しました（BADINDEX）」で落ちることがある）
+        """シートを名前で取る（無ければ作る）。Excel が忙しいときの例外は com_retry 側で再試行する。"""
         try:
-            ws = self.wb.Worksheets(name)
-            if ws is not None and ws.Name == name:
-                return ws
-        except Exception:
-            pass
+            return self.wb.Worksheets(name)
+        except Exception as e:
+            code = getattr(e, "hresult", None) or (e.args[0] if e.args else None)
+            if code in BUSY:
+                raise
+            # 「見つからない」（BADINDEX）→ 作る。同名が既にある（別プロセスが直前に作った）場合は取り直す
         ws = self.wb.Worksheets.Add()
-        ws.Name = name
-        return ws
+        try:
+            ws.Name = name
+            return ws
+        except Exception:
+            try:
+                self.wb.Application.DisplayAlerts = False
+                ws.Delete()
+            finally:
+                self.wb.Application.DisplayAlerts = True
+            return self.wb.Worksheets(name)
 
     def setup(self, name: str, codes: list[str], fields: list[tuple[str, str]]):
         """1行目に項目名、A列に銘柄コード、残りに RssMarket の式を書き込む。"""
