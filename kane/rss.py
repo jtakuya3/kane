@@ -172,9 +172,14 @@ class ExcelRss:
             self.wb.SaveAs(target, 51)  # 51 = .xlsx
 
     def _sheet(self, name: str):
-        for ws in self.wb.Worksheets:
-            if ws.Name == name:
+        # 名前で直接取る（Worksheets を順に回すと、別のプロセスがシートを触っている最中に
+        # 「例外が発生しました（BADINDEX）」で落ちることがある）
+        try:
+            ws = self.wb.Worksheets(name)
+            if ws is not None and ws.Name == name:
                 return ws
+        except Exception:
+            pass
         ws = self.wb.Worksheets.Add()
         ws.Name = name
         return ws
