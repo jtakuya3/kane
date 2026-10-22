@@ -217,12 +217,31 @@ class Monitor:
             await asyncio.sleep(60)
 
 
+def _single_instance(name: str = "kane_monitor"):
+    """同じ監視を2つ起動しない（アラート窓が2つ出る原因）。Windows の名前付きミューテックスで判定。"""
+    if sys.platform != "win32":
+        return True
+    import ctypes
+
+    handle = ctypes.windll.kernel32.CreateMutexW(None, False, f"Global\\{name}")
+    already = ctypes.windll.kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+    if already:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return False
+    _single_instance.handle = handle  # プロセスが生きている間は保持
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
     cfg = load_config(args.config)
+    if not args.check and not _single_instance():
+        print("監視はすでに起動しています（アラート窓が2つ出るので、この窓は終了します）。"
+              "止めるときは先に動いている黒い窓で Ctrl+C → Y")
+        return
     if cfg.source == "rss":
         from .rss_monitor import RssMonitor
 

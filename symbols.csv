@@ -25,5 +25,6 @@ code,name,group,float_shares,breakout_vol5m,issued_shares,ytd_high,loan
 5133,テリロジーHD,security,10300000,,17100000,,
 4288,アズジェント,security,1650000,,3815000,,1
 6407,CKD,fa,41000000,,67909449,,1
+254A,AIフュージョンキャピタルG,other,4850000,,9702000,,
 # IPO銘柄はここに group=ipo で追加（例）,
 #000A,IPO銘柄名,ipo,,,,,
