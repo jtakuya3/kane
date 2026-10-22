@@ -44,6 +44,10 @@ class RuleConfig:
     depth_jump_ratio: float = 0.3  # 板の総量が1回の更新でこの割合以上 増えた／減ったら通知（同じ値段どうしで比較）
     depth_jump_min_yen: float = 20_000_000  # 増減分の金額の下限（2,000万円）
     depth_cooldown_sec: int = 120  # 同じ側の総量通知は2分に1回まで
+    close_auction_from: str = "15:25"  # 引けオークションの開始（R16）
+    close_imbalance_ratio: float = 0.3  # 成行の売り買い差が、板10本の片側合計のこの割合以上なら通知
+    close_imbalance_min_yen: float = 20_000_000  # 成行の差の金額の下限（2,000万円）
+    close_cooldown_sec: int = 60
     # R14 ストップ高の剥がれ
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10
@@ -111,6 +115,7 @@ class RssConfig:
         "bid_price": "最良買気配値{i}", "bid_qty": "最良買気配数量{i}",
         "ask_price": "最良売気配値{i}", "ask_qty": "最良売気配数量{i}",
         "bid_sign": "", "ask_sign": "",  # 気配の状態（特別気配）の項目名。空なら R12 は判定しない
+        "mkt_buy": "成行買数量", "mkt_sell": "成行売数量",  # 引けオークション（15:25〜15:30）の成行。項目名が違えば check で分かる
     })
     special_values: list = field(default_factory=lambda: ["特", "S", "特別気配"])
     value_unit: float = 1000  # 楽天RSSの売買代金は千円単位
@@ -148,7 +153,7 @@ class Config:
     popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
     feed: bool = True  # 画面のアラート窓に全通知を流す
     dialog: bool = False  # popup_rules の通知でメッセージボックスも出す
-    quiet_after: str | None = "15:25"  # この時刻以降はアラート窓・音を出さない
+    quiet_after: str | None = "15:25"  # この時刻以降はアラート窓・音を出さない（R16 引けオークションだけは例外）
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)

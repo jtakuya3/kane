@@ -74,8 +74,8 @@ class Notifier:
     def send(self, text: str, popup: bool = False, rule: str = ""):
         """popup=True は重要な通知（アラート窓で赤く強調、dialog 設定時はメッセージボックスも）。"""
         print(f"{datetime.now():%H:%M:%S} {text}", flush=True)
-        if self.quiet_after and datetime.now().time() >= self.quiet_after:
-            return
+        if self.quiet_after and datetime.now().time() >= self.quiet_after and not rule.startswith("R16"):
+            return  # 15:25以降は出さない。ただし引けオークション（R16）は例外
         if self.feed:
             self.feed.push(text, rule, popup)
         if popup and self.dialog:

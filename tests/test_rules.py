@@ -288,3 +288,19 @@ def test_r13_depth_jump_up_and_down():
     a2 = run(e, [board_snap(2, base_buy, NORMAL_SELL)])
     r2 = rules_of(a2, "R13")
     assert "買い板急減" in [x.level for x in r2]  # 単独の大口板としての「剥がれ」も同時に出てよい
+
+
+def test_r16_close_auction_sell_imbalance():
+    """引けオークション中に成行売りが買い板合計の30%以上超過したら通知。15:25前は出さない。"""
+    from kane.models import Snapshot
+    e = eng(float_shares=None)
+    def snapc(hh, mm, mb, ms):
+        return Snapshot(T0.replace(hour=hh, minute=mm, second=0), "TEST", 3872, 100000,
+                        board_buy=[(3872 - i, 5000) for i in range(10)], board_sell=[(3873 + i, 5000) for i in range(10)],
+                        mkt_buy=mb, mkt_sell=ms)
+    a = run(e, [snapc(15, 20, 1000, 40000), snapc(15, 26, 1000, 40000)])
+    r = rules_of(a, "R16")
+    assert len(r) == 1 and r[0].level == "引け成行売り超過" and r[0].extras["imbalance"] == 39000
+    assert "成行 売り 40,000株 / 買い 1,000株" in r[0].message
+    a2 = run(e, [snapc(15, 27, 1000, 41000)])  # 1.5倍未満の増え方は黙る
+    assert not rules_of(a2, "R16")

@@ -26,7 +26,7 @@ def watch_fields(cfg: RssConfig) -> list[tuple[str, str]]:
     """固定監視シートの列（キー, RssMarketの項目名）。板を board_levels 本まで読む。"""
     it = cfg.items
     out = [(k, it[k]) for k in BASE_KEYS if it.get(k)]
-    for k in ("bid_sign", "ask_sign"):
+    for k in ("bid_sign", "ask_sign", "mkt_buy", "mkt_sell"):
         if it.get(k):
             out.append((k, it[k]))
     for i in range(1, cfg.board_levels + 1):
@@ -107,6 +107,7 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
         buy1_qty=bids[0][1] if bids else None, sell1_qty=asks[0][1] if asks else None,
         buy1_sign=sign("bid_sign"), sell1_sign=sign("ask_sign"),
         board_buy=bids if len(bids) > 1 else None, board_sell=asks if len(asks) > 1 else None,
+        mkt_buy=val.get("mkt_buy"), mkt_sell=val.get("mkt_sell"),
     )
     return snap, extra
 

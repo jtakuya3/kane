@@ -29,6 +29,8 @@ class Snapshot:
     # 板10本ずつ [(値段, 数量), ...]（最良気配から順）
     board_buy: list | None = None
     board_sell: list | None = None
+    mkt_buy: float | None = None  # 成行買い数量（引けオークション中などに出る）
+    mkt_sell: float | None = None
 
 
 @dataclass

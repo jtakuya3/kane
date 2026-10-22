@@ -483,6 +483,39 @@ def r3_stall(st: SymbolState, b: Bar, cfg: RuleConfig) -> list[Alert]:
                    f"天井警戒：高値圏で失速（1分出来高がピークの{b.volume / peak:.0%}）", cfg)]
 
 
-SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high, r15_ytd_volume]
+def r16_close_auction(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """引けオークション（15:25〜15:30）で、成行の売りと買いが大きく偏っていたら知らせる。
+
+    例：オークション前 3,872円、成行売り 40,000株 に対して成行買いが少ない → 引けで下がりやすい。
+    偏り＝成行売り−成行買い。板10本の片側合計に対する割合と金額で判定し、偏りが変わるたびに更新。
+    """
+    if s.mkt_buy is None and s.mkt_sell is None:
+        return []
+    hm = f"{s.ts:%H:%M}"
+    if hm < cfg.close_auction_from or hm >= "15:30":
+        return []
+    buy, sell = s.mkt_buy or 0.0, s.mkt_sell or 0.0
+    diff = sell - buy
+    book = sum(q for _, q in (s.board_buy or [])) if diff > 0 else sum(q for _, q in (s.board_sell or []))
+    if book <= 0 or abs(diff) < book * cfg.close_imbalance_ratio or abs(diff) * s.price < cfg.close_imbalance_min_yen:
+        return []
+    side = "売り" if diff > 0 else "買い"
+    v = st.vars
+    last = v.get("r16_last")
+    grew = not last or last[0] != side or abs(diff) >= last[1] * 1.5  # 向きが変わった／1.5倍に増えた
+    if not grew and not st.cooled(("R16", side), s.ts, cfg.close_cooldown_sec):
+        return []  # 同じ向きで増え方が小さいときは cooldown ごとに1回だけ
+    st.cooled(("R16", side), s.ts, cfg.close_cooldown_sec)
+    v["r16_last"] = (side, abs(diff))
+    hint = "引けで下がりやすい" if side == "売り" else "引けで上がりやすい"
+    return [_card(st, s, "R16", f"引け成行{side}超過", [
+        f"引けオークション：成行 売り {sell:,.0f}株 / 買い {buy:,.0f}株 → {side}超過 {abs(diff):,.0f}株"
+        f"（約{abs(diff) * s.price / 1e4:,.0f}万円、{'買い' if side == '売り' else '売り'}板10本合計の{abs(diff) / book:.0%}）  {hint}",
+        f"現在値 {_yen(s.price)}円  買い板合計 {sum(q for _, q in (s.board_buy or [])):,.0f}株 / 売り板合計 {sum(q for _, q in (s.board_sell or [])):,.0f}株",
+    ], cfg, mkt_buy=buy, mkt_sell=sell, imbalance=diff)]
+
+
+SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high, r15_ytd_volume,
+                  r16_close_auction]
 BAR_RULES = [r3_stall]
 LIGHT_RULES = [r10_price_step]
