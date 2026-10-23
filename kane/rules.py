@@ -281,7 +281,8 @@ def _ladders(st: SymbolState, s: Snapshot, cfg: RuleConfig, cur_buy, cur_sell, q
     return out
 
 
-def _depth_jump(st: SymbolState, s: Snapshot, cfg: RuleConfig, prev: dict, cur_buy, cur_sell) -> list[Alert]:
+def _depth_jump(st: SymbolState, s: Snapshot, cfg: RuleConfig, prev: dict, cur_buy, cur_sell,
+                already: set | None = None) -> list[Alert]:
     """板の総量（10本の合計）が1回の更新で急に増えた／減ったら知らせる。
 
     株価が動いて見える範囲がずれた分は比べられないので、前回と今回の両方にある値段だけで比較する。
@@ -303,6 +304,9 @@ def _depth_jump(st: SymbolState, s: Snapshot, cfg: RuleConfig, prev: dict, cur_b
             continue
         changes = sorted(((book[p] - prev[p], p) for p in common), key=lambda x: -abs(x[0]))
         changes = [(d, p) for d, p in changes if (d > 0) == (delta > 0) and abs(d) >= abs(delta) * 0.1][:4]
+        # 同じ更新で「大口板が出た／剥がれた」として既に知らせた1本が増減の大半なら、二重に出さない
+        if already and changes and (side, changes[0][1]) in already and abs(changes[0][0]) >= abs(delta) * 0.7:
+            continue
         where = "、".join(f"{_yen(p)}円 {d:+,.0f}株" for d, p in changes)
         kind = "急増" if delta > 0 else "急減"
         hint = ("買い支えが入った" if side == "買い" else "上値に蓋") if delta > 0 else \
@@ -363,7 +367,9 @@ def r13_big_board(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
     # 1b) 連なり板：同じ量の板が値段の連続する段に並ぶ（同じ人の意図的な注文とみなす）
     out += _ladders(st, s, cfg, cur_buy, cur_sell, qtys, traded)
     # 1c) 板の総量の急増・急減（どこか1〜数段にポッと大口が出た／引っ込めた）
-    out += _depth_jump(st, s, cfg, prev, cur_buy, cur_sell)
+    already = {(a.level if a.level in ("買い", "売り") else a.level[:2], a.extras.get("wall_price"))
+               for a in out if a.rule == "R13" and a.extras.get("wall_price") is not None}
+    out += _depth_jump(st, s, cfg, prev, cur_buy, cur_sell, already)
 
     # 2) 見張り中の大口板の減り方を見る
     for (side, p), w in list(walls.items()):
