@@ -304,3 +304,17 @@ def test_r16_close_auction_sell_imbalance():
     assert "成行 売り 40,000株 / 買い 1,000株" in r[0].message
     a2 = run(e, [snapc(15, 27, 1000, 41000)])  # 1.5倍未満の増え方は cooldown（120秒）内は黙る
     assert not rules_of(a2, "R16")
+
+
+def test_r13_depth_move_between_levels():
+    """買い板の大口が 1998円 から 1995円 に移動（総量は同じ）→「移動」を通知。"""
+    e = eng(float_shares=None, wall_notify_appear=False, depth_jump_min_yen=10_000_000)
+    q = [3000, 9000, 4000, 12000, 5000, 8000, 6000, 11000, 7000, 10000]
+    base = [(2000 - i, q[i]) for i in range(10)]
+    big = list(base); big[2] = (1998, 4000 + 40_000)
+    moved = list(base); moved[5] = (1995, 8000 + 40_000)
+    a = run(e, [board_snap(0, base, NORMAL_SELL), board_snap(1, big, NORMAL_SELL), board_snap(200, moved, NORMAL_SELL)])
+    levels = [x.level for x in rules_of(a, "R13")]
+    assert "買い板急増" in levels and "買い板移動" in levels
+    mv = [x for x in rules_of(a, "R13") if x.level == "買い板移動"][0]
+    assert mv.extras["move_from"] == 1998 and mv.extras["move_to"] == 1995 and "現在値から離した" in mv.message

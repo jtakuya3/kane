@@ -298,6 +298,22 @@ def _depth_jump(st: SymbolState, s: Snapshot, cfg: RuleConfig, prev: dict, cur_b
         if before <= 0:
             continue
         delta = after - before
+        # 大口の「移動」：ある値段から大きく減り、別の値段に同じくらい増えた（総量は変わらないので上の判定に掛からない）
+        thr = max(before * cfg.depth_jump_ratio, cfg.depth_jump_min_yen / max(s.price, 1e-9))
+        downs = [(book[p] - prev[p], p) for p in common if prev[p] - book[p] >= thr]
+        ups = [(book[p] - prev[p], p) for p in common if book[p] - prev[p] >= thr]
+        if downs and ups and abs(delta) < thr:
+            dn = min(downs)
+            up = max(ups)
+            if abs(dn[0]) * 0.7 <= up[0] <= abs(dn[0]) * 1.3 and st.cooled(("R13move", side), s.ts, cfg.depth_cooldown_sec):
+                direction = ("現在値から離した" if (side == "買い" and up[1] < dn[1]) or (side == "売り" and up[1] > dn[1])
+                             else "現在値に近づけた")
+                out.append(_card(st, s, "R13", f"{side}板移動", [
+                    f"大口{side}板の移動：{_yen(dn[1])}円 {dn[0]:+,.0f}株 → {_yen(up[1])}円 {up[0]:+,.0f}株"
+                    f"（約{up[0] * s.price / 1e4:,.0f}万円）  {direction}",
+                    f"{side}板の総量は変わらず {after:,.0f}株  現在値 {_yen(s.price)}円",
+                ], cfg, move_from=dn[1], move_to=up[1], move_qty=up[0]))
+            continue
         if abs(delta) < before * cfg.depth_jump_ratio or abs(delta) * s.price < cfg.depth_jump_min_yen:
             continue
         if not st.cooled(("R13depth", side, delta > 0), s.ts, cfg.depth_cooldown_sec):
