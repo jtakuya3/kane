@@ -158,3 +158,12 @@ def test_line_analyze():
     s24 = sum(closes[-24:])
     assert abs(p / ((s24 + p) / 25) - 1.30) < 1e-9
     assert r["streak"] == 2 and r["after"]["30%ライン"][0] == p
+
+
+def test_load_symbols_mute_flag(tmp_path):
+    from kane.config import load_symbols
+    p = tmp_path / "s.csv"
+    p.write_text("code,name,group,float_shares,breakout_vol5m,issued_shares,ytd_high,loan,mute\n"
+                 "1111,A,x,100,,200,,1,\n2222,B,x,100,,200,,,1\n", encoding="utf-8")
+    syms = load_symbols(p)
+    assert [s.mute for s in syms] == [False, True]

@@ -66,7 +66,8 @@ rankings = [[1, "ALL"], [6, "ALL"], [7, "ALL"], [5, "ALL"], [1, "TG"], [1, "TS"]
 # ---- 楽天RSS（source.type = "rss" のとき） ----
 [rss]
 workbook = "C:/Users/takuy/Desktop/08_開発案件/kane_data/kane_rss.xlsx"   # kane が式を書き込むブック（無ければ作る）
-poll_sec = 1.0
+poll_sec = 1.0        # スキャン銘柄の読み取り間隔（秒）
+watch_poll_sec = 0.3  # 固定銘柄（板・成行・R13/R16）の読み取り間隔（秒）。別スレッドで回す
 code_suffix = ".T"
 board_levels = 10          # 固定銘柄の板の本数（重ければ 5 や 0 に）
 universe_csv = "universe.csv"   # スキャン用の銘柄一覧（python -m kane.universe で作る）

@@ -5,6 +5,7 @@ config.toml の [source] type = "rss" のとき kane.monitor から呼ばれる�
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -31,9 +32,10 @@ class RssMonitor:
         self.rss = ExcelRss(r, wb if wb.is_absolute() else cfg.base_dir / wb)
         self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog, cfg.quiet_after)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
-        self.watch = list(cfg.symbols)
+        self.muted = {s.code for s in cfg.symbols if s.mute}
+        self.watch = [s for s in cfg.symbols if not s.mute]
         self.pinned = {s.code for s in self.watch}
-        self.scan = load_universe(cfg.base_dir / r.universe_csv, self.pinned, r.max_scan)
+        self.scan = load_universe(cfg.base_dir / r.universe_csv, self.pinned | self.muted, r.max_scan)
         for s_ in self.scan:
             apply_baseline(s_, cfg.baseline)
         self.wf, self.sf = watch_fields(r), scan_fields(r)
@@ -44,6 +46,9 @@ class RssMonitor:
         self.ytd_done: set[str] = set()
         self.count = 0
         self.stat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
+        self.wstat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
+        self.lock = threading.Lock()  # engine・recorder・emit を2スレッドから使うため
+        self.watch_running = False
 
     # ---- 準備 ----
     def setup_sheets(self):
@@ -101,51 +106,96 @@ class RssMonitor:
             self.pool.submit(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}")
 
     # ---- 1回分の読み取り ----
-    def poll(self):
-        now = datetime.now()
-        snaps = {}
-        alerts = []
-        for sheet, infos, fields, record in (
-            (WATCH_SHEET, self.watch, self.wf, True),
-            (SCAN_SHEET, self.scan, self.sf, False),
-        ):
-            if not infos:
+    def _process(self, infos, fields, rows, record: bool, now: datetime):
+        """シートの行を Snapshot にして判定する（engine は lock の中で使う）。"""
+        snaps, alerts = {}, []
+        for info, row in zip(infos, rows):
+            key = tuple(row)
+            if self.last.get(info.code) == key:
+                continue  # 変化なし
+            self.last[info.code] = key
+            snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values,
+                                          self.cfg.rss.value_unit)
+            if info.code not in self.ytd_done and extra.get("ytd_high"):
+                # 最初に読めた年初来高値（寄り前なら前日までの値）を基準にする
+                if info.ytd_high is None:
+                    info.ytd_high = extra["ytd_high"]
+                self.ytd_done.add(info.code)
+            if snap is None:
                 continue
-            rows = self.rss.read(sheet, len(infos), len(fields))
-            for info, row in zip(infos, rows):
-                key = tuple(row)
-                if self.last.get(info.code) == key:
-                    continue  # 変化なし
-                self.last[info.code] = key
-                self.stat["changed"] += 1
-                snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values,
-                                              self.cfg.rss.value_unit)
-                if info.code not in self.ytd_done and extra.get("ytd_high"):
-                    # 最初に読めた年初来高値（寄り前なら前日までの値）を基準にする
-                    if info.ytd_high is None:
-                        info.ytd_high = extra["ytd_high"]
-                    self.ytd_done.add(info.code)
-                if snap is None:
-                    continue
-                snaps[info.code] = snap
+            snaps[info.code] = snap
+            with self.lock:
                 if record:
                     self.recorder.snapshot(snap)
                 alerts += self.engine.process(snap)
-        alerts += self.engine.tick(now)
-        self.emit(alerts, snaps)
+        return snaps, alerts
 
-    def _log_speed(self, sec: float, every: float = 300):
-        """全銘柄スキャンに耐えられるかの目安：5分ごとに読み取り1回の時間と、値が動いた銘柄数を記録する。"""
-        st = self.stat
+    def poll(self):
+        """スキャン銘柄（全銘柄）を1回読む。固定銘柄は poll_watch が別スレッドで読む。"""
+        now = datetime.now()
+        snaps, alerts = {}, []
+        if self.scan:
+            rows = self.rss.read(SCAN_SHEET, len(self.scan), len(self.sf))
+            snaps, alerts = self._process(self.scan, self.sf, rows, False, now)
+            self.stat["changed"] += len(snaps)
+        if not self.watch_running and self.watch:  # 固定銘柄スレッドが動いていないときは自分で読む
+            rows = self.rss.read(WATCH_SHEET, len(self.watch), len(self.wf))
+            s2, a2 = self._process(self.watch, self.wf, rows, True, now)
+            snaps.update(s2)
+            alerts += a2
+        with self.lock:
+            alerts += self.engine.tick(now)
+            self.emit(alerts, snaps)
+
+    def poll_watch(self, rss: ExcelRss):
+        """固定銘柄（板・成行）を1回読む。watch_poll_sec ごとに別スレッドで呼ぶ。"""
+        now = datetime.now()
+        rows = rss.read(WATCH_SHEET, len(self.watch), len(self.wf))
+        snaps, alerts = self._process(self.watch, self.wf, rows, True, now)
+        self.wstat["changed"] += len(snaps)
+        if alerts:
+            with self.lock:
+                self.emit(alerts, snaps)
+
+    def _watch_loop(self, stop: threading.Event):
+        """固定銘柄専用の読み取りスレッド。Excel への接続は自分の分を持つ（COM はスレッドごと）。"""
+        r = self.cfg.rss
+        wb = Path(r.workbook)
+        rss = ExcelRss(r, wb if wb.is_absolute() else self.cfg.base_dir / wb)
+        try:
+            rss.connect()
+        except Exception as e:
+            log.warning("固定銘柄スレッド：Excelに接続できません（メインの1秒周期で読みます）: %s", e)
+            return
+        self.watch_running = True
+        log.info("固定銘柄 %d銘柄を %.1f秒ごとに別スレッドで読みます", len(self.watch), r.watch_poll_sec)
+        try:
+            while not stop.is_set():
+                t0 = time.monotonic()
+                try:
+                    self.poll_watch(rss)
+                except Exception as e:
+                    log.warning("固定銘柄の読み取りエラー: %s（2秒後に再試行）", e)
+                    time.sleep(2)
+                    continue
+                self._log_speed(time.monotonic() - t0, stat=self.wstat, label="固定")
+                time.sleep(max(0.02, r.watch_poll_sec - (time.monotonic() - t0)))
+        finally:
+            self.watch_running = False
+
+    def _log_speed(self, sec: float, every: float = 300, stat: dict | None = None, label: str = "スキャン"):
+        """5分ごとに読み取り1回の時間と、値が動いた銘柄数を記録する（固定・スキャン別）。"""
+        st = stat if stat is not None else self.stat
         st["n"] += 1
         st["sec"] += sec
         st["max"] = max(st["max"], sec)
         el = time.monotonic() - st["t"]
-        if el < every:
+        if el < every or st["n"] == 0:
             return
-        log.info("速度：読み取り1回 平均%.2f秒（最大%.2f秒）/ 固定%d＋スキャン%d銘柄 / 値が動いた銘柄 1回あたり%.0f",
-                 st["sec"] / st["n"], st["max"], len(self.watch), len(self.scan), st["changed"] / st["n"])
-        self.stat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
+        n = len(self.watch) if label == "固定" else len(self.scan)
+        log.info("速度（%s %d銘柄）：読み取り1回 平均%.2f秒（最大%.2f秒）/ 値が動いた銘柄 1回あたり%.0f",
+                 label, n, st["sec"] / st["n"], st["max"], st["changed"] / st["n"])
+        st.update({"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0})
 
     # ---- メインループ ----
     def run(self):
@@ -167,7 +217,13 @@ class RssMonitor:
                 time.sleep(30)
                 continue
             self.count = 0
-            self.notifier.send(f"kane監視（楽天RSS）開始：固定{len(self.watch)}銘柄＋スキャン{len(self.scan)}銘柄")
+            self.notifier.send(f"kane監視（楽天RSS）開始：固定{len(self.watch)}銘柄＋スキャン{len(self.scan)}銘柄"
+                               + (f"（通知除外 {len(self.muted)}）" if self.muted else ""))
+            stop = threading.Event()
+            th = None
+            if self.watch and self.cfg.rss.watch_poll_sec > 0:
+                th = threading.Thread(target=self._watch_loop, args=(stop,), daemon=True, name="watch")
+                th.start()
             while datetime.now().time() < end:
                 t0 = time.monotonic()
                 try:
@@ -182,5 +238,8 @@ class RssMonitor:
                     continue
                 self._log_speed(time.monotonic() - t0)
                 time.sleep(max(0.05, self.cfg.rss.poll_sec - (time.monotonic() - t0)))
+            stop.set()
+            if th:
+                th.join(timeout=5)
             self.notifier.send(f"kane監視（楽天RSS）終了（本日の通知 {self.count}件）")
             time.sleep(60)

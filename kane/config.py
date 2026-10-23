@@ -98,7 +98,8 @@ class ScannerConfig:
 class RssConfig:
     """楽天 マーケットスピードII RSS（Excel）から読む場合の設定。"""
     workbook: str = "kane_rss.xlsx"
-    poll_sec: float = 1.0
+    poll_sec: float = 1.0  # スキャン銘柄（全銘柄）の読み取り間隔
+    watch_poll_sec: float = 0.3  # 固定銘柄（板・成行）の読み取り間隔。別スレッドで回す
     function: str = "RssMarket"
     code_suffix: str = ".T"  # RssMarket に渡す銘柄コードの末尾（東証）
     board_levels: int = 10  # 固定監視銘柄で読む板の本数（0なら板を読まない）
@@ -134,6 +135,7 @@ class SymbolInfo:
     ytd_max_vol: float | None = None  # 今年の最大日出来高（前日まで）
     ytd_max_date: str = ""
     loan: str = ""  # 貸借区分：1＝貸借銘柄（空売り可）、0＝信用銘柄（制度信用の売りなし）、空＝未確認
+    mute: bool = False  # 1 なら通知しない（浮動株の一覧には残す）
 
 
 @dataclass
@@ -218,6 +220,7 @@ def load_symbols(path: Path) -> list[SymbolInfo]:
                     ytd_high=num("ytd_high"),
                     group=(row.get("group") or "").strip(),
                     loan=(row.get("loan") or "").strip(),
+                    mute=(row.get("mute") or "").strip() in ("1", "true", "yes"),
                 )
             )
     return out
