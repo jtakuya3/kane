@@ -27,6 +27,6 @@ code,name,group,float_shares,breakout_vol5m,issued_shares,ytd_high,loan,mute
 6407,CKD,fa,41000000,,67909449,,1,
 254A,AIフュージョンキャピタルG,other,4850000,,9702000,,,
 4829,日本エンタープライズ,other,15800000,,38540000,,1,
-3858,ユビキタスAI,ai,8600000,,10458883,,,
+3858,ユビキタスAI,ai,8600000,,10458883,,1,
 # IPO銘柄はここに group=ipo で追加（例）,,
 #000A,IPO銘柄名,ipo,,,,,,
