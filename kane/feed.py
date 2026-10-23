@@ -43,9 +43,10 @@ class AlertFeed:
         self.ok = True
         threading.Thread(target=self._run, daemon=True).start()
 
-    def push(self, text: str, rule: str = "", important: bool = False):
+    def push(self, text: str, rule: str = "", important: bool = False, ts: datetime | None = None):
+        """ts は起こった時刻（読み取り時刻）。無ければ今。表示が遅れても時刻はずれない。"""
         if self.ok:
-            self.q.put((datetime.now(), text, color_key(rule, important)))
+            self.q.put((ts or datetime.now(), text, color_key(rule, important)))
 
     def _run(self):
         try:

@@ -111,7 +111,7 @@ class Monitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            await asyncio.to_thread(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}")
+            await asyncio.to_thread(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}", a.ts)
 
     async def wait_session(self):
         while True:

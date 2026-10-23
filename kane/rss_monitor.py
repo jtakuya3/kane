@@ -103,7 +103,7 @@ class RssMonitor:
             self.count += 1
             self.recorder.alert(a)
             pop = a.rule in self.cfg.popup_rules or f"{a.rule}:{a.level}" in self.cfg.popup_rules
-            self.pool.submit(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}")
+            self.pool.submit(self.notifier.send, a.message, pop, f"{a.rule}:{a.level}", a.ts)
 
     # ---- 1回分の読み取り ----
     def _process(self, infos, fields, rows, record: bool, now: datetime):

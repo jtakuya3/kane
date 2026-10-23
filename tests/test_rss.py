@@ -167,3 +167,21 @@ def test_load_symbols_mute_flag(tmp_path):
                  "1111,A,x,100,,200,,1,\n2222,B,x,100,,200,,,1\n", encoding="utf-8")
     syms = load_symbols(p)
     assert [s.mute for s in syms] == [False, True]
+
+
+def test_notifier_shows_event_time_not_display_time(capsys):
+    """表示の時刻は「起こった時刻」（読み取り時刻）であって、表示した時刻ではない。"""
+    from kane.sinks import Notifier
+
+    n = Notifier(None, False, False)
+    pushed = []
+
+    class Feed:
+        def push(self, text, rule="", important=False, ts=None):
+            pushed.append(ts)
+
+    n.feed = Feed()
+    ts = datetime(2026, 10, 23, 9, 31, 7)
+    n.send("大口板 出た", True, "R13", ts)
+    assert capsys.readouterr().out.startswith("09:31:07 ")
+    assert pushed == [ts]
