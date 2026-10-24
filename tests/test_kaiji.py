@@ -170,7 +170,7 @@ def test_revision_upward_buy_and_downward_ignored():
     v = judge_revision("4498", "業績予想の下方修正に関するお知らせ", REVISION_BODY)
     assert v and not v.buy and v.detail.get("down")
     v = judge_revision("4498", "業績予想の修正に関するお知らせ", "表が画像")
-    assert v and not v.buy and "確認中" in v.summary  # 後追いで推定する
+    assert v and not v.buy and "PDF参照" in v.summary
     assert judge_revision("4498", "配当予想の修正に関するお知らせ", REVISION_BODY) is None
 
 
