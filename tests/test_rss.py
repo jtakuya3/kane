@@ -12,7 +12,7 @@ def test_fields_and_formula():
     wf = watch_fields(cfg)
     assert wf[0] == ("price", "現在値")
     assert ("ask_qty2", "最良売気配数量2") in wf
-    assert len(scan_fields(cfg)) == 11
+    assert len(scan_fields(cfg)) == 12  # 時価総額（cap）を含む
     assert formula(cfg, "4498", "現在値") == '=RssMarket("4498.T","現在値")'
 
 
@@ -185,3 +185,43 @@ def test_notifier_shows_event_time_not_display_time(capsys):
     n.send("大口板 出た", True, "R13", ts)
     assert capsys.readouterr().out.startswith("09:31:07 ")
     assert pushed == [ts]
+
+
+def test_notifier_quiet_after_exceptions():
+    """15:25以降は出さないが、quiet_except のルール（R16・R18）は出す。"""
+    from datetime import datetime as _dt
+    from kane.sinks import Notifier
+    import kane.sinks as sinks
+
+    n = Notifier(None, False, False, quiet_after="15:25", quiet_except=["R16", "R18"])
+    pushed = []
+
+    class Feed:
+        def push(self, text, rule="", important=False, ts=None):
+            pushed.append(rule)
+
+    n.feed = Feed()
+
+    class Late(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt(2026, 10, 24, 15, 40)
+
+    old = sinks.datetime
+    sinks.datetime = Late
+    try:
+        n.send("a", True, "R13:出た")
+        n.send("b", True, "R18:買い")
+        n.send("c", True, "R16:引け")
+    finally:
+        sinks.datetime = old
+    assert pushed == ["R18:買い", "R16:引け"]
+
+
+def test_load_config_reads_tdnet_and_cap(tmp_path):
+    from pathlib import Path
+    from kane.config import load_config
+    cfg = load_config(Path(__file__).resolve().parent.parent / "config.toml")
+    assert cfg.tdnet.enabled and cfg.tdnet.buyback_min_pct == 5.0 and cfg.tdnet.small_max_oku == 300
+    assert cfg.rss.items["cap"] == "時価総額" and "R18" in cfg.quiet_except
+    assert ("cap", "時価総額") in scan_fields(cfg.rss)

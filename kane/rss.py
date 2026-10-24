@@ -26,7 +26,7 @@ def watch_fields(cfg: RssConfig) -> list[tuple[str, str]]:
     """固定監視シートの列（キー, RssMarketの項目名）。板を board_levels 本まで読む。"""
     it = cfg.items
     out = [(k, it[k]) for k in BASE_KEYS if it.get(k)]
-    for k in ("bid_sign", "ask_sign", "mkt_buy", "mkt_sell"):
+    for k in ("bid_sign", "ask_sign", "mkt_buy", "mkt_sell", "cap"):
         if it.get(k):
             out.append((k, it[k]))
     for i in range(1, cfg.board_levels + 1):
@@ -40,7 +40,7 @@ def scan_fields(cfg: RssConfig) -> list[tuple[str, str]]:
     it = cfg.items
     keys = ["price", "volume", "vwap", "value", "high", "prev_close", "ytd_high"]
     out = [(k, it[k]) for k in keys if it.get(k)]
-    for k in ("bid_sign", "ask_sign"):
+    for k in ("bid_sign", "ask_sign", "cap"):
         if it.get(k):
             out.append((k, it[k]))
     for k in ("bid_price", "bid_qty", "ask_price", "ask_qty"):
@@ -71,7 +71,7 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
     """シートの1行を Snapshot にする。2つ目の戻り値は年初来高値など Snapshot 以外の値。"""
     raw = {k: v for (k, _), v in zip(fields, row)}
     val = {k: num(v) for k, v in raw.items()}
-    extra = {"ytd_high": val.get("ytd_high")}
+    extra = {"ytd_high": val.get("ytd_high"), "cap": val.get("cap")}  # cap＝時価総額（RSSの単位のまま）
     price = val.get("price")
     if not price:
         return None, extra  # 寄り前・データ未着

@@ -77,6 +77,21 @@ class RuleConfig:
 
 
 @dataclass
+class TdnetConfig:
+    """適時開示（TDnet）の見張り（R18）。監視の取引時間とは別の時間帯で動く。"""
+    enabled: bool = True
+    poll_sec: float = 1.0  # 一覧を見る間隔（秒）
+    start: str = "08:00"  # 見張る時間帯（PTS夜間の材料になる 15:00〜 の開示も拾う）
+    end: str = "18:30"
+    newest_first: bool = True  # 一覧の先頭が最新か（python -m kane.tdnet --check で確認）
+    buyback_min_pct: float = 5.0  # 自己株取得：発行済の何%以上で買い
+    small_max_oku: float = 300  # 提携：開示した側の時価総額（億円）がこれ以下なら小型
+    big_min_oku: float = 10_000  # 提携：相手の時価総額（億円）がこれ以上なら大手（universe から自動で足す）
+    bigcaps_file: str = "bigcaps.txt"  # 大手の名前（略称・海外）
+    cap_unit: float = 1_000_000  # 楽天RSS「時価総額」の単位（百万円）
+
+
+@dataclass
 class ScannerConfig:
     enabled: bool = True
     interval_sec: float = 10.0
@@ -117,7 +132,7 @@ class RssConfig:
         "bid_price": "最良買気配値{i}", "bid_qty": "最良買気配数量{i}",
         "ask_price": "最良売気配値{i}", "ask_qty": "最良売気配数量{i}",
         "bid_sign": "", "ask_sign": "",  # 気配の状態（特別気配）の項目名。空なら R12 は判定しない
-        "mkt_buy": "成行買数量", "mkt_sell": "成行売数量",  # 引けオークション（15:25〜15:30）の成行。項目名が違えば check で分かる
+        "mkt_buy": "成行買数量", "mkt_sell": "成行売数量", "cap": "時価総額",  # 引けオークション（15:25〜15:30）の成行。項目名が違えば check で分かる
     })
     special_values: list = field(default_factory=lambda: ["特", "S", "特別気配"])
     value_unit: float = 1000  # 楽天RSSの売買代金は千円単位
@@ -156,8 +171,10 @@ class Config:
     popup_rules: list = field(default_factory=lambda: ["R13", "R14:剥がれ", "R14:警戒"])
     feed: bool = True  # 画面のアラート窓に全通知を流す
     dialog: bool = False  # popup_rules の通知でメッセージボックスも出す
-    quiet_after: str | None = "15:25"  # この時刻以降はアラート窓・音を出さない（R16 引けオークションだけは例外）
+    quiet_after: str | None = "15:25"  # この時刻以降はアラート窓・音を出さない（quiet_except のルールは例外）
+    quiet_except: list = field(default_factory=lambda: ["R16", "R18"])  # 15:25以降でも出すルール（引けオークション・開示）
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
+    tdnet: TdnetConfig = field(default_factory=TdnetConfig)
     source: str = "kabu"  # "kabu" または "rss"
     rss: RssConfig = field(default_factory=RssConfig)
     base_dir: Path = Path(".")
@@ -271,7 +288,9 @@ def load_config(path: str | Path = "config.toml") -> Config:
         feed=raw.get("notify", {}).get("feed", True),
         dialog=raw.get("notify", {}).get("dialog", False),
         quiet_after=raw.get("notify", {}).get("quiet_after", "15:25"),
+        quiet_except=raw.get("notify", {}).get("quiet_except", ["R16", "R18"]),
         scanner=scanner,
+        tdnet=TdnetConfig(**{k: v for k, v in raw.get("tdnet", {}).items() if k in {f.name for f in fields(TdnetConfig)}}),
         source=raw.get("source", {}).get("type", "kabu"),
         rss=_rss_config(raw.get("rss", {})),
         base_dir=base,

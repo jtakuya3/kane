@@ -55,13 +55,15 @@ def decode_board(s: str | None):
 
 class Notifier:
     def __init__(self, webhook_file: Path | None, enabled: bool, beep: bool,
-                 feed: bool = False, dialog: bool = False, quiet_after: str | None = None):
+                 feed: bool = False, dialog: bool = False, quiet_after: str | None = None,
+                 quiet_except: list | None = None):
         self.url = None
         if enabled and webhook_file and webhook_file.exists():
             self.url = webhook_file.read_text(encoding="utf-8").strip() or None
         self.beep = beep
         self.dialog = dialog
         self.quiet_after = None  # この時刻以降は画面表示・音・Slackを出さない（記録と黒い画面の表示のみ）
+        self.quiet_except = tuple(quiet_except or ["R16"])  # それでも出すルール
         if quiet_after:
             h, m = quiet_after.split(":")
             self.quiet_after = dtime(int(h), int(m))
@@ -76,8 +78,8 @@ class Notifier:
         ts は「起こった時刻」（板・値を読み取った時刻）。表示の時刻はこれを使い、表示した時刻ではない。"""
         ts = ts or datetime.now()
         print(f"{ts:%H:%M:%S} {text}", flush=True)
-        if self.quiet_after and datetime.now().time() >= self.quiet_after and not rule.startswith("R16"):
-            return  # 15:25以降は出さない。ただし引けオークション（R16）は例外
+        if self.quiet_after and datetime.now().time() >= self.quiet_after and not rule.startswith(self.quiet_except):
+            return  # 15:25以降は出さない。ただし quiet_except（引けオークション・開示）は例外
         if self.feed:
             self.feed.push(text, rule, popup, ts)
         if popup and self.dialog:

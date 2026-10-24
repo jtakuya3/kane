@@ -30,7 +30,8 @@ class RssMonitor:
         r = cfg.rss
         wb = Path(r.workbook)
         self.rss = ExcelRss(r, wb if wb.is_absolute() else cfg.base_dir / wb)
-        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog, cfg.quiet_after)
+        self.notifier = Notifier(cfg.slack_webhook_file, cfg.slack_enabled, cfg.beep, cfg.feed, cfg.dialog, cfg.quiet_after,
+                                  cfg.quiet_except)
         self.recorder = Recorder(cfg.data_dir, cfg.record_snapshots)
         self.muted = {s.code for s in cfg.symbols if s.mute}
         self.watch = [s for s in cfg.symbols if not s.mute]
@@ -49,6 +50,8 @@ class RssMonitor:
         self.wstat = {"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0}
         self.lock = threading.Lock()  # engine・recorder・emit を2スレッドから使うため
         self.watch_running = False
+        self.caps: dict[str, float] = {}  # 銘柄 → 時価総額（円）。スキャンの読み取りで更新、R18 で使う
+        self.names = {s.code: s.name for s in self.watch + self.scan}
 
     # ---- 準備 ----
     def setup_sheets(self):
@@ -116,6 +119,8 @@ class RssMonitor:
             self.last[info.code] = key
             snap, extra = row_to_snapshot(info.code, fields, row, now, self.cfg.rss.special_values,
                                           self.cfg.rss.value_unit)
+            if extra.get("cap"):
+                self.caps[info.code] = extra["cap"] * self.cfg.tdnet.cap_unit
             if info.code not in self.ytd_done and extra.get("ytd_high"):
                 # 最初に読めた年初来高値（寄り前なら前日までの値）を基準にする
                 if info.ytd_high is None:
@@ -197,10 +202,71 @@ class RssMonitor:
                  label, n, st["sec"] / st["n"], st["max"], st["changed"] / st["n"])
         st.update({"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0})
 
+    # ---- 適時開示（TDnet, R18） ----
+    def _tdnet_alert(self, d, verdicts, elapsed: float):
+        """開示1件の判定をアラートにして、記録と通知を直接行う（emit は売買代金で落とすので通さない）。"""
+        from .models import Alert
+
+        ts = datetime.now()
+        name = d.name or self.names.get(d.code, "")
+        cap = self.caps.get(d.code)
+        cap_txt = f"時価総額 {cap / 1e8:,.0f}億円" if cap else "時価総額 不明"
+        for v in verdicts:
+            level = "買い" if v.buy else "参考"
+            lines = [f"{ts:%H:%M:%S}", f"{d.code} {name}  {cap_txt}", f"[開示 {d.time}] {d.title}", v.summary,
+                     d.pdf, f"（検知まで {elapsed:.1f}秒）"]
+            a = Alert(ts, d.code, "R18", level, "\n".join(lines), 0.0,
+                      {"kind": v.kind, "pdf": d.pdf, "title": d.title, **v.detail})
+            with self.lock:
+                self.count += 1
+                self.recorder.alert(a)
+            pop = "R18" in self.cfg.popup_rules or f"R18:{level}" in self.cfg.popup_rules
+            self.pool.submit(self.notifier.send, a.message, pop, f"R18:{level}", ts)
+
+    def _tdnet_loop(self, stop: threading.Event):
+        """TDnet の一覧を poll_sec ごとに見て、新しい開示を判定する。監視の時間帯とは独立に start〜end で動く。"""
+        from .kaiji import BigCaps, judge
+        from .tdnet import TdnetWatcher, fetch, pdf_text
+
+        t = self.cfg.tdnet
+        w = TdnetWatcher(self.cfg.data_dir, t.newest_first, t.poll_sec)
+        big, big_day = None, None
+        start, end = _hm(t.start), _hm(t.end)
+        log.info("適時開示（TDnet）を %.1f秒ごとに見ます（%s〜%s）", t.poll_sec, t.start, t.end)
+        while not stop.is_set():
+            now = datetime.now()
+            if not (now.weekday() < 5 and start <= now.time() < end):
+                time.sleep(20)
+                continue
+            if big is None or big_day != now.date() or (len(big.names) < 50 and self.caps):
+                big = BigCaps.load(self.cfg.base_dir / t.bigcaps_file, self.caps, self.names, t.big_min_oku)
+                big_day = now.date()
+            t0 = time.monotonic()
+            try:
+                new = w.poll(now)
+            except Exception as e:
+                log.warning("TDnet 一覧の取得エラー: %s", e)
+                time.sleep(5)
+                continue
+            for d in new:
+                try:
+                    st, pdf, _ = fetch(d.pdf, timeout=6)
+                    body = pdf_text(pdf) if st == 200 else ""
+                    vs = judge(d.code, d.title, body, big, self.caps.get(d.code), t.buyback_min_pct, t.small_max_oku)
+                    if vs:
+                        self._tdnet_alert(d, vs, time.monotonic() - t0)
+                    else:
+                        log.info("開示 %s %s %s 「%s」（判定なし）", d.time, d.code, d.name, d.title)
+                except Exception as e:
+                    log.warning("開示の判定エラー %s 「%s」: %s", d.code, d.title, e)
+            time.sleep(max(0.05, t.poll_sec - (time.monotonic() - t0)))
+
     # ---- メインループ ----
     def run(self):
         start, end = _hm(self.cfg.session_start), _hm(self.cfg.session_end)
         waiting = False
+        if self.cfg.tdnet.enabled:
+            threading.Thread(target=self._tdnet_loop, args=(threading.Event(),), daemon=True, name="tdnet").start()
         while True:
             now = datetime.now()
             if not (now.weekday() < 5 and start <= now.time() < end):
