@@ -16,7 +16,7 @@ enabled = false   # Slackには送らない（画面のアラート窓のみ）�
 [notify]
 beep = false   # true にするとWindowsの通知音も鳴らす
 feed = true     # 画面右上のアラート窓（最前面）に全通知を流す
-popup_rules = ["R13", "R14:剥がれ", "R14:警戒", "R16"]   # アラート窓で赤く強調＋音（ルール名 or ルール名:レベル）
+popup_rules = ["R13", "R14:剥がれ", "R14:警戒", "R16", "R17:特買い", "R17:特売り"]   # アラート窓で赤く強調＋音（ルール名 or ルール名:レベル）
 quiet_after = "15:25"   # この時刻以降はアラート窓・音を出さない（記録は続ける）。R16 引けオークションだけは例外で出す
 dialog = false  # true にすると popup_rules の通知でメッセージボックスも出す（フォーカスを奪うので注意）
 
@@ -49,6 +49,7 @@ depth_jump_min_yen = 20000000 # 増減分が2,000万円以上
 depth_cooldown_sec = 120  # 同じ側は2分に1回まで
 close_imbalance_ratio = 0.3   # R16：引けオークションの成行の売り買い差が、反対側の板10本合計の30%以上
 close_imbalance_min_yen = 20000000 # かつ差額2,000万円以上
+special_cooldown_sec = 20     # R17 特別気配：同じ向きが20秒以内に再び付いても通知しない（点滅よけ）
 price_step = 0.05
 
 # ランキングで全市場から動いている銘柄を拾い、PUSH 50枠の残りを自動で入れ替える
@@ -72,7 +73,7 @@ code_suffix = ".T"
 board_levels = 10          # 固定銘柄の板の本数（重ければ 5 や 0 に）
 universe_csv = "universe.csv"   # スキャン用の銘柄一覧（python -m kane.universe で作る）
 max_scan = 4000   # universe.csv の全銘柄（3,846）をスキャン
-scan_rules = ["R2", "R3", "R4", "R10", "R14", "R15"]   # スキャン銘柄で通知するルール（R15は全銘柄で1日80〜160件）
+scan_rules = ["R2", "R3", "R4", "R10", "R14", "R15", "R17"]   # スキャン銘柄で通知するルール（R15は全銘柄で1日80〜160件）
 scan_min_value_yen = 100000000              # スキャン銘柄は売買代金1億円以上だけ通知
 value_unit = 1000          # 楽天RSSの売買代金は千円単位
 
@@ -93,5 +94,5 @@ ask_price = "最良売気配値{i}"
 ask_qty = "最良売気配数量{i}"
 mkt_buy = "成行買数量"   # 引けオークションの成行（R16）。check.bat でエラーなら公式の項目名に直す
 mkt_sell = "成行売数量"
-bid_sign = ""   # 特別気配が分かる項目名（分かったら入れる）
-ask_sign = ""
+bid_sign = "特別買気配フラグ"   # 特別買気配のとき "S"（R17 特買い）。check.bat でエラーなら公式の項目名に直す
+ask_sign = "特別売気配フラグ"   # 特別売気配のとき "S"（R17 特売り）

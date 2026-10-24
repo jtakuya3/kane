@@ -94,9 +94,10 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
 
     def sign(key):
         s = raw.get(key)
-        if s is None or s == "":
-            return None
-        return "0102" if str(s).strip() in special_values else str(s)
+        if s is None:
+            return None  # 項目が設定されていない
+        s = str(s).strip()
+        return "0102" if s in special_values else s  # "" ＝ 特別気配ではない（通常）
 
     snap = Snapshot(
         ts=ts, symbol=code, price=price, volume=val.get("volume") or 0.0,

@@ -48,6 +48,7 @@ class RuleConfig:
     close_imbalance_ratio: float = 0.3  # 成行の売り買い差が、板10本の片側合計のこの割合以上なら通知
     close_imbalance_min_yen: float = 20_000_000  # 成行の差の金額の下限（2,000万円）
     close_cooldown_sec: int = 60
+    special_cooldown_sec: int = 20  # R17 特別気配：同じ向きの再発はこの秒数以内なら黙る（点滅よけ）
     # R14 ストップ高の剥がれ
     limit_warn_drop: float = 0.5  # 買い残がこの割合以下（直近のピーク比）になったら剥がれ警戒
     limit_warn_window_min: int = 10

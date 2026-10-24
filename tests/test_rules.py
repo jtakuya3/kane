@@ -318,3 +318,34 @@ def test_r13_depth_move_between_levels():
     assert "買い板急増" in levels and "買い板移動" in levels
     mv = [x for x in rules_of(a, "R13") if x.level == "買い板移動"][0]
     assert mv.extras["move_from"] == 1998 and mv.extras["move_to"] == 1995 and "現在値から離した" in mv.message
+
+
+def test_r17_special_buy_quote_and_release():
+    """特買いが付いたら通知（赤）、解消して値が付いたら「特買解消」。付いたままの間は黙る。"""
+    from kane.models import Snapshot
+    e = eng(float_shares=None)
+    def sp(sec, price, sign="", bid=None):  # 通常時はフラグの欄が空（""）、特別気配で "0102"
+        return Snapshot(T0.replace(minute=30) + timedelta(seconds=sec), "TEST", price, 10000,
+                        bid=bid or price, ask=(bid or price) + 1, buy1_qty=120000, sell1_qty=300,
+                        buy1_sign=sign, sell1_sign="")
+    a = run(e, [sp(0, 1000), sp(1, 1000, "0102", 1030), sp(2, 1000, "0102", 1060), sp(40, 1090, "")])
+    r = rules_of(a, "R17")
+    assert [x.level for x in r] == ["特買", "特買解消"]
+    assert "特別買い気配 1030円（直前 1000円から +3.0%）" in r[0].message and "120,000株" in r[0].message
+    assert r[0].extras["phase"] == "発生" and r[0].extras["base_price"] == 1000
+    assert "解消（39秒） → 1090円で値が付いた、特買前 1000円から +9.0%" in r[1].message
+
+
+def test_r17_special_sell_quote_flicker_is_quiet():
+    """特売りが20秒以内に点滅しても2回目は出さない。フラグ項目が無い（None）なら何もしない。"""
+    from kane.models import Snapshot
+    e = eng(float_shares=None)
+    def sp(sec, sign):
+        return Snapshot(T0.replace(minute=30) + timedelta(seconds=sec), "TEST", 500, 10000,
+                        bid=490, ask=495, buy1_sign="", sell1_sign=sign)
+    a = run(e, [sp(0, ""), sp(1, "0102"), sp(5, ""), sp(8, "0102")])
+    assert [x.level for x in rules_of(a, "R17")] == ["特売", "特売解消"]  # 8秒後の再発は黙る
+    e2 = eng(float_shares=None)
+    a2 = run(e2, [Snapshot(T0.replace(minute=30), "TEST", 500, 10000),
+                  Snapshot(T0.replace(minute=31), "TEST", 510, 11000)])
+    assert not rules_of(a2, "R17")

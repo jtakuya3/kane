@@ -537,7 +537,50 @@ def r16_close_auction(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Ale
     ], cfg, mkt_buy=buy, mkt_sell=sell, imbalance=diff)]
 
 
+def r17_special_quote(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]:
+    """特別気配（特買い・特売り）が付いた／解消したことを知らせる。
+
+    特買い＝買いが殺到して値が付かず、取引所が気配値を段階的に上げている状態。付いた瞬間と、
+    解消して値が付いた瞬間（どこで寄ったか）を記録する。フラグは RSS の 特別買気配フラグ／特別売気配フラグ。
+    """
+    if s.buy1_sign is None and s.sell1_sign is None:
+        return []  # フラグの項目が無い
+    side = "買い" if s.buy1_sign == SPECIAL_SIGN else ("売り" if s.sell1_sign == SPECIAL_SIGN else None)
+    v = st.vars
+    prev = v.get("r17_side")
+    if side == prev:
+        if side is None:
+            v["r17_price"] = s.price  # 特別気配が付く直前の値段を覚えておく
+        return []
+    v["r17_side"] = side
+    if not _in_continuous_session(s.ts):
+        return []  # 寄り前・昼休みの切り替わりは出さない
+    out = []
+    if prev is not None:
+        since = v.get("r17_since")
+        dur = f"（{(s.ts - since).total_seconds():.0f}秒）" if since else ""
+        base = v.get("r17_price")
+        chg = f"、特{prev[0]}前 {_yen(base)}円から {(s.price / base - 1):+.1%}" if base else ""
+        out.append(_card(st, s, "R17", f"特{prev[0]}解消", [
+            f"特別{prev}気配 解消{dur} → {_yen(s.price)}円で値が付いた{chg}",
+        ], cfg, side=prev, phase="解消", base_price=base))
+    if side is not None:
+        v["r17_since"] = s.ts
+        if not st.cooled(("R17", side), s.ts, cfg.special_cooldown_sec):
+            return out  # 同じ向きが短時間で点滅しているだけ
+        quote = s.bid if side == "買い" else s.ask
+        base = v.get("r17_price") or s.price
+        chg = f"（直前 {_yen(base)}円から {(quote / base - 1):+.1%}）" if quote and base else ""
+        qty = s.buy1_qty if side == "買い" else s.sell1_qty
+        q_txt = f"  気配の数量 {qty:,.0f}株" if qty else ""
+        hint = "買いが殺到して値が付かない" if side == "買い" else "売りが殺到して値が付かない"
+        out.append(_card(st, s, "R17", f"特{side[0]}", [
+            f"特別{side}気配 {_yen(quote) if quote else '-'}円{chg}  {hint}{q_txt}",
+        ], cfg, side=side, phase="発生", quote=quote, base_price=base))
+    return out
+
+
 SNAPSHOT_RULES = [r2_vwap_dev, r4_double_top, r10_price_step, r13_big_board, r14_stop_high, r15_ytd_volume,
-                  r16_close_auction]
+                  r16_close_auction, r17_special_quote]
 BAR_RULES = [r3_stall]
 LIGHT_RULES = [r10_price_step]
