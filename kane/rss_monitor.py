@@ -283,7 +283,7 @@ class RssMonitor:
                     body = pdf_text(pdf) if st == 200 else ""
                     a = self._judge_args(d.code)
                     vs = judge(d.code, d.title, body, big, a["cap_yen"], t.buyback_min_pct, t.small_max_oku,
-                               a["issued_shares"], a["price"], t.revision_min_pct, t.yutai_min_yield_pct)
+                               a["issued_shares"], a["price"], t.yutai_min_yield_pct)
                     if vs:
                         self._tdnet_alert(d, vs, time.monotonic() - t0)
                         if any(v.kind == "自己株取得" and v.detail.get("pct") is None for v in vs):

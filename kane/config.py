@@ -86,7 +86,6 @@ class TdnetConfig:
     newest_first: bool = True  # 一覧の先頭が最新か（python -m kane.tdnet --check で確認）
     buyback_min_pct: float = 5.0  # 自己株取得：発行済の何%以上で買い
     small_max_oku: float = 300  # 提携：開示した側の時価総額（億円）がこれ以下なら小型
-    revision_min_pct: float = 20.0  # 業績修正：営業利益の増減率がこれ以上で買い
     yutai_min_yield_pct: float = 4.0  # 株主優待：優待利回り（100株）がこれ以上で買い
     followup_sec: float = 4.0  # 自己株の割合が出ないとき、時価総額・株価が読めるのを待って後追いする秒数
     big_min_oku: float = 10_000  # 提携：相手の時価総額（億円）がこれ以上なら大手（universe から自動で足す）

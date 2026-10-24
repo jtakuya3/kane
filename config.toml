@@ -109,7 +109,6 @@ newest_first = true     # 一覧の先頭が最新なら true（--check の「�
 buyback_min_pct = 5.0   # 自己株式取得：発行済株式総数の5%以上で買い
 small_max_oku = 300     # 提携：開示した会社の時価総額300億円以下なら小型（買う側）
 big_min_oku = 10000     # 提携：相手が時価総額1兆円以上なら大手
-revision_min_pct = 20.0 # 業績予想の修正：営業利益の増減率 +20%以上で買い
 yutai_min_yield_pct = 4.0  # 株主優待の新設・拡充：優待利回り（100株）4%以上で買い
 followup_sec = 4.0      # 自己株の割合が本文に無いとき、4秒以内に推定して追記する
 bigcaps_file = "bigcaps.txt"
