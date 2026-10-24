@@ -114,3 +114,25 @@ def test_judge_runs_both_rules():
 
 def test_norm_removes_spaces_and_fullwidth():
     assert norm("７．２ ％  発行済") == "7.2%発行済"
+
+
+def test_tob_by_giant_counts_as_partner():
+    v = judge_partner("4047", "トヨタ自動車株式会社による当社株式に対する公開買付けに関する賛同の意見表明のお知らせ", "", BIG, 150e8)
+    assert v and v.buy and v.detail["partner"] == "トヨタ自動車"
+
+
+def test_buyback_ratio_fallback_without_word_wariai():
+    body = "取得し得る株式の総数 500,000株（発行済株式総数の 6.1%）取得価額の総額 300百万円"
+    v = judge_buyback("4498", "自己株式取得に係る事項の決定に関するお知らせ", body)
+    assert v and v.buy and v.detail["pct"] == 6.1
+
+
+def test_watcher_404_then_first_disclosure_is_reported(tmp_path, monkeypatch):
+    import kane.tdnet as td
+    st = {"code": 404}
+    monkeypatch.setattr(td, "fetch", lambda url, timeout=4.0, etag=None: (st["code"], LIST_HTML.encode("utf-8") if st["code"] == 200 else b"", None))
+    w = TdnetWatcher(tmp_path)
+    now = datetime(2026, 10, 24, 8, 30)
+    assert w.poll(now) == []
+    st["code"] = 200
+    assert [d.code for d in w.poll(now)] == ["4498", "338A"]  # その日の最初の開示を飲み込まない

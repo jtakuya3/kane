@@ -15,12 +15,13 @@ from dataclasses import dataclass, field
 BUYBACK_TITLE = re.compile(r"自己株式.{0,12}?(取得|買付|公開買付)")
 BUYBACK_SKIP = re.compile(r"取得状況|取得結果|取得の終了|取得終了|買付けの結果|買付け結果|消却|処分|譲渡|立会外分売|満了|変更に関する")
 PARTNER_TITLE = re.compile(r"資本業務提携|業務提携|資本提携|包括提携|戦略的提携|買収|株式取得|株式の取得|子会社化|"
-                           r"連携|協業|共同開発|共同事業|パートナーシップ|アライアンス|出資")
+                           r"連携|協業|共同開発|共同事業|パートナーシップ|アライアンス|出資|公開買付|意見表明")  # 大手によるTOBも
 PARTNER_SKIP = re.compile(r"解消|終了|中止|延期|訂正|進捗|状況")
 # 「AWSを利用」のような“インフラを使うだけ”の表現（提携ではない）
 USE_ONLY = re.compile(r"(を|の)(利用|採用|活用|導入|使用|上で)")
 
 RATIO_NEAR = re.compile(r"割合[^0-9０-９%％]{0,40}?([0-9]+(?:\.[0-9]+)?)\s*[%％]")
+RATIO_FALLBACK = re.compile(r"発行済株式総数[^0-9%％]{0,30}?([0-9]+(?:\.[0-9]+)?)\s*[%％]")  # 「発行済株式総数の7.2%」
 ANY_PCT = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*[%％]")
 SHARES_NEAR = re.compile(r"取得し得る株式の総数[^0-9]{0,30}?([0-9,]+)\s*株")
 AMOUNT_NEAR = re.compile(r"取得価額の総額[^0-9]{0,30}?([0-9,]+)\s*(百万円|億円|円)")
@@ -79,10 +80,8 @@ class BigCaps:
 
 
 def _ratio(body: str) -> float | None:
-    m = RATIO_NEAR.search(body)
-    if m:
-        return float(m.group(1))
-    return None
+    m = RATIO_NEAR.search(body) or RATIO_FALLBACK.search(body)
+    return float(m.group(1)) if m else None
 
 
 def judge_buyback(code: str, title: str, body: str, min_pct: float = 5.0) -> Verdict | None:

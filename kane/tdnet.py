@@ -156,7 +156,8 @@ class TdnetWatcher:
         if status == 304:
             return []
         if status == 404:
-            return []  # 今日まだ1件も無い
+            self.primed = True  # 今日まだ1件も無い＝これから出るものは全部新しい
+            return []
         if status in (403, 429) or status >= 500:
             self.backoff = time.monotonic() + 10
             log.warning("TDnet 一覧 HTTP %s（10秒休む）", status)

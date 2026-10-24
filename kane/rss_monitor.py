@@ -230,7 +230,7 @@ class RssMonitor:
 
         t = self.cfg.tdnet
         w = TdnetWatcher(self.cfg.data_dir, t.newest_first, t.poll_sec)
-        big, big_day = None, None
+        big, big_day, big_ncaps = None, None, -1
         start, end = _hm(t.start), _hm(t.end)
         log.info("適時開示（TDnet）を %.1f秒ごとに見ます（%s〜%s）", t.poll_sec, t.start, t.end)
         while not stop.is_set():
@@ -238,11 +238,15 @@ class RssMonitor:
             if not (now.weekday() < 5 and start <= now.time() < end):
                 time.sleep(20)
                 continue
-            if big is None or big_day != now.date() or (len(big.names) < 50 and self.caps):
-                big = BigCaps.load(self.cfg.base_dir / t.bigcaps_file, self.caps, self.names, t.big_min_oku)
-                big_day = now.date()
             t0 = time.monotonic()
             try:
+                # 大手リスト：日付が変わったとき、または時価総額が読めた銘柄が300以上増えたときに作り直す
+                # （8:00の起動時は Excel 未接続で時価総額が空。8:55以降に読めてから universe の大手が足される）
+                if big is None or big_day != now.date() or len(self.caps) - big_ncaps >= 300:
+                    caps = dict(self.caps)  # 読み取りスレッドが書き換えるのでコピー
+                    big = BigCaps.load(self.cfg.base_dir / t.bigcaps_file, caps, self.names, t.big_min_oku)
+                    big_day, big_ncaps = now.date(), len(caps)
+                    log.info("大手リスト %d名（universe の時価総額 %d銘柄から）", len(big.names), len(caps))
                 new = w.poll(now)
             except Exception as e:
                 log.warning("TDnet 一覧の取得エラー: %s", e)
