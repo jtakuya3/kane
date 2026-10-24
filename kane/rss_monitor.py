@@ -51,6 +51,7 @@ class RssMonitor:
         self.lock = threading.Lock()  # engine・recorder・emit を2スレッドから使うため
         self.watch_running = False
         self.caps: dict[str, float] = {}  # 銘柄 → 時価総額（円）。スキャンの読み取りで更新、R18 で使う
+        self.prices: dict[str, float] = {}  # 銘柄 → 現在値。R18（優待利回り・自己株の推定）で使う
         self.names = {s.code: s.name for s in self.watch + self.scan}
 
     # ---- 準備 ----
@@ -129,6 +130,7 @@ class RssMonitor:
             if snap is None:
                 continue
             snaps[info.code] = snap
+            self.prices[info.code] = snap.price
             with self.lock:
                 if record:
                     self.recorder.snapshot(snap)
@@ -203,7 +205,7 @@ class RssMonitor:
         st.update({"t": time.monotonic(), "n": 0, "sec": 0.0, "changed": 0, "max": 0.0})
 
     # ---- 適時開示（TDnet, R18） ----
-    def _tdnet_alert(self, d, verdicts, elapsed: float):
+    def _tdnet_alert(self, d, verdicts, elapsed: float, note: str = ""):
         """開示1件の判定をアラートにして、記録と通知を直接行う（emit は売買代金で落とすので通さない）。"""
         from .models import Alert
 
@@ -214,14 +216,37 @@ class RssMonitor:
         for v in verdicts:
             level = "買い" if v.buy else "参考"
             lines = [f"{ts:%H:%M:%S}", f"{d.code} {name}  {cap_txt}", f"[開示 {d.time}] {d.title}", v.summary,
-                     d.pdf, f"（検知まで {elapsed:.1f}秒）"]
-            a = Alert(ts, d.code, "R18", level, "\n".join(lines), 0.0,
+                     d.pdf, f"（検知まで {elapsed:.1f}秒{note}）"]
+            a = Alert(ts, d.code, "R18", level, "\n".join(lines), self.prices.get(d.code) or 0.0,
                       {"kind": v.kind, "pdf": d.pdf, "title": d.title, **v.detail})
             with self.lock:
                 self.count += 1
                 self.recorder.alert(a)
             pop = "R18" in self.cfg.popup_rules or f"R18:{level}" in self.cfg.popup_rules
             self.pool.submit(self.notifier.send, a.message, pop, f"R18:{level}", ts)
+
+    def _judge_args(self, code: str) -> dict:
+        info = self.infos.get(code)
+        return {"issued_shares": info.issued_shares if info else None, "cap_yen": self.caps.get(code),
+                "price": self.prices.get(code)}
+
+    def _tdnet_followup(self, d, body: str, big, t0: float):
+        """自己株の割合が出なかったとき：時価総額・株価が読めるのを followup_sec まで待って推定し、追記する。"""
+        from .kaiji import judge_buyback
+
+        t = self.cfg.tdnet
+        deadline = t0 + t.followup_sec
+        while time.monotonic() < deadline:
+            a = self._judge_args(d.code)
+            v = judge_buyback(d.code, d.title, body, t.buyback_min_pct, a["issued_shares"], a["cap_yen"])
+            if v and v.detail.get("pct") is not None:
+                self._tdnet_alert(d, [v], time.monotonic() - t0, "、後追いで推定")
+                return
+            time.sleep(0.3)
+        v = judge_buyback(d.code, d.title, body, t.buyback_min_pct)
+        if v:
+            v.summary = v.summary.replace("割合 確認中", "割合 算出できず（時価総額・株価・発行済が未取得）PDF参照")
+            self._tdnet_alert(d, [v], time.monotonic() - t0, "、後追い")
 
     def _tdnet_loop(self, stop: threading.Event):
         """TDnet の一覧を poll_sec ごとに見て、新しい開示を判定する。監視の時間帯とは独立に start〜end で動く。"""
@@ -256,9 +281,13 @@ class RssMonitor:
                 try:
                     st, pdf, _ = fetch(d.pdf, timeout=6)
                     body = pdf_text(pdf) if st == 200 else ""
-                    vs = judge(d.code, d.title, body, big, self.caps.get(d.code), t.buyback_min_pct, t.small_max_oku)
+                    a = self._judge_args(d.code)
+                    vs = judge(d.code, d.title, body, big, a["cap_yen"], t.buyback_min_pct, t.small_max_oku,
+                               a["issued_shares"], a["price"], t.revision_min_pct, t.yutai_min_yield_pct)
                     if vs:
                         self._tdnet_alert(d, vs, time.monotonic() - t0)
+                        if any(v.kind == "自己株取得" and v.detail.get("pct") is None for v in vs):
+                            threading.Thread(target=self._tdnet_followup, args=(d, body, big, t0), daemon=True).start()
                     else:
                         log.info("開示 %s %s %s 「%s」（判定なし）", d.time, d.code, d.name, d.title)
                 except Exception as e:

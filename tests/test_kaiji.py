@@ -74,7 +74,7 @@ def test_buyback_below_threshold_and_skips():
     assert judge_buyback("4498", "自己株式の消却に関するお知らせ", BUYBACK_BODY) is None
     assert judge_buyback("4498", "業績予想の修正に関するお知らせ", BUYBACK_BODY) is None
     v = judge_buyback("4498", "自己株式の取得に係る事項の決定に関するお知らせ", "")  # 画像PDF
-    assert v and not v.buy and "PDF参照" in v.summary
+    assert v and not v.buy and "確認中" in v.summary  # 後追いで推定する
 
 
 BIG = BigCaps(["トヨタ自動車", "トヨタ", "AWS", "Microsoft", "マイクロソフト"])
@@ -136,3 +136,77 @@ def test_watcher_404_then_first_disclosure_is_reported(tmp_path, monkeypatch):
     assert w.poll(now) == []
     st["code"] = 200
     assert [d.code for d in w.poll(now)] == ["4498", "338A"]  # その日の最初の開示を飲み込まない
+
+
+def test_buyback_estimates_ratio_when_pdf_has_none():
+    body = "取得し得る株式の総数 1,000,000株（上限） 取得価額の総額 2,000百万円（上限）"
+    v = judge_buyback("4498", "自己株式取得に係る事項の決定に関するお知らせ", body)
+    assert v and v.detail["pct"] is None and "確認中" in v.summary
+    v = judge_buyback("4498", "自己株式取得に係る事項の決定に関するお知らせ", body, issued_shares=16_729_200)
+    assert v and v.buy and abs(v.detail["pct"] - 5.98) < 0.01 and "上限株数÷発行済" in v.summary
+    v = judge_buyback("4498", "自己株式取得に係る事項の決定に関するお知らせ", body, cap_yen=600e8)
+    assert v and not v.buy and abs(v.detail["pct"] - 3.33) < 0.01 and "上限金額÷時価総額" in v.summary
+    body2 = body + " 発行済株式総数（自己株式を除く） 12,500,000株"
+    v = judge_buyback("4498", "自己株式取得に係る事項の決定に関するお知らせ", body2, cap_yen=600e8)
+    assert v and v.buy and v.detail["pct"] == 8.0  # 本文の発行済株式数が最優先
+
+
+REVISION_BODY = """
+１．業績予想の修正（2027年3月期 第2四半期累計）
+             売上高   営業利益   経常利益   純利益   1株当たり
+前回発表予想  5,000    300    310    200   20.00
+今回修正予想  5,600    450    460    300   30.00
+増減額       600     150    150    100
+増減率（％）  12.0    50.0    48.4    50.0
+"""
+
+
+def test_revision_upward_buy_and_downward_ignored():
+    from kane.kaiji import judge_revision
+    v = judge_revision("4498", "業績予想の修正に関するお知らせ", REVISION_BODY)
+    assert v and v.buy and v.detail["rate"] == 50.0 and "+50.0%" in v.summary
+    v = judge_revision("4498", "業績予想の修正に関するお知らせ", REVISION_BODY.replace("50.0", "△ 15.0").replace("48.4", "△ 12.0"))
+    assert v and not v.buy and v.detail["rate"] == -15.0
+    v = judge_revision("4498", "業績予想の下方修正に関するお知らせ", REVISION_BODY)
+    assert v and not v.buy and v.detail.get("down")
+    v = judge_revision("4498", "業績予想の修正に関するお知らせ", "表が画像")
+    assert v and not v.buy and "確認中" in v.summary  # 後追いで推定する
+    assert judge_revision("4498", "配当予想の修正に関するお知らせ", REVISION_BODY) is None
+
+
+def test_yutai_yield():
+    from kane.kaiji import judge_yutai
+    body = "２．優待内容 100株以上 保有の株主様に QUOカード 3,000円分 を贈呈 500株以上 5,000円分"
+    v = judge_yutai("4498", "株主優待制度の新設に関するお知らせ", body, price=600)
+    assert v and v.buy and abs(v.detail["yield"] - 5.0) < 0.01 and "3,000円相当" in v.summary
+    v = judge_yutai("4498", "株主優待制度の拡充に関するお知らせ", body, price=1500)
+    assert v and not v.buy and abs(v.detail["yield"] - 2.0) < 0.01
+    v = judge_yutai("4498", "株主優待制度の新設に関するお知らせ", body, price=None)
+    assert v and not v.buy and "株価不明" in v.summary
+    assert judge_yutai("4498", "株主優待制度の廃止に関するお知らせ", body, 600) is None
+    assert judge_yutai("4498", "株主優待制度に関するお知らせ", body, 600) is None  # 新設・拡充の言葉が無い
+
+
+def test_feed_inserts_links_as_tagged_segments():
+    from kane.feed import _insert_with_links
+
+    class FakeText:
+        def __init__(self):
+            self.buf = ""
+            self.tags = []
+
+        def insert(self, at, s, tags):
+            line, col = map(int, at.split("."))
+            self.buf = self.buf[:col] + s + self.buf[col:]
+            self.tags.append((s, tags))
+
+        def index(self, expr):
+            base, plus = expr.split("+")
+            n = int(plus.rstrip("c"))
+            return f"1.{int(base.split('.')[1]) + n}"
+
+    t = FakeText()
+    body = "開示 https://www.release.tdnet.info/inbs/a.pdf\n（検知まで 1.2秒）\n"
+    _insert_with_links(t, body, "important")
+    assert t.buf == body
+    assert ("https://www.release.tdnet.info/inbs/a.pdf", ("important", "link")) in t.tags

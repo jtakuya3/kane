@@ -1,8 +1,11 @@
 """適時開示（TDnet）の表題と本文から「買い判断」を出す純粋な判定ロジック。I/O はしない。
 
-判定は2つ（R18）:
+判定は4つ（R18）:
   自己株取得  … 自己株式の取得（新規決定）で、発行済株式総数に対する割合が 5% 以上 → 買い
+                PDF に割合が無ければ 上限株数÷発行済株式数（または 上限金額÷時価総額）で推定する
   大手との提携 … 提携・買収・連携の開示で、相手が時価総額1兆円以上の大手、開示した側が300億円以下 → 小型の方を買い
+  業績修正    … 業績予想の修正で、営業利益（無ければ利益の列）の増減率が +20% 以上 → 買い
+  株主優待    … 優待の新設・拡充で、100株あたりの優待額÷（株価×100株）が 4% 以上 → 買い
 時価総額はざっくり（楽天RSS「時価総額」）。分からなければ「不明」と添えて出す（黙らない）。
 """
 from __future__ import annotations
@@ -25,12 +28,36 @@ RATIO_FALLBACK = re.compile(r"発行済株式総数[^0-9%％]{0,30}?([0-9]+(?:\.
 ANY_PCT = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*[%％]")
 SHARES_NEAR = re.compile(r"取得し得る株式の総数[^0-9]{0,30}?([0-9,]+)\s*株")
 AMOUNT_NEAR = re.compile(r"取得価額の総額[^0-9]{0,30}?([0-9,]+)\s*(百万円|億円|円)")
+ISSUED_NEAR = re.compile(r"発行済株式総数[^0-9%％]{0,20}?([0-9,]{7,})\s*株")  # 本文に書いてある発行済株式数
+
+REVISION_TITLE = re.compile(r"業績予想.{0,8}修正|業績予想の修正|上方修正|下方修正|業績予想及び配当予想の修正")
+REVISION_SKIP = re.compile(r"下方修正")
+# 「増減率（％） 12.3 25.0 24.1 30.2」 の行。空白は1つに畳んだ文章で読む（数字どうしの区切りが要る）
+REVISION_RATE = re.compile(r"増減率\s*[（(]?\s*[%％]?\s*[)）]?\s*((?:[△▲\-－‐]?\s?[0-9]+(?:\.[0-9]+)?\s+){1,5}[△▲\-－‐]?\s?[0-9]+(?:\.[0-9]+)?)")
+
+YUTAI_TITLE = re.compile(r"株主優待")
+YUTAI_GOOD = re.compile(r"新設|導入|拡充|拡大|増額|開始|変更")
+YUTAI_SKIP = re.compile(r"廃止|縮小|中止|終了|一時停止")
+YUTAI_AMOUNT = re.compile(r"([0-9,]{3,7})\s*円\s*(分|相当|の|分の)")  # 「QUOカード 1,000円分」「3,000円相当」
 
 
 def norm(text: str) -> str:
     """全角→半角、空白を全部消す（pypdf は日本語の間に空白を入れることがある）。"""
     t = unicodedata.normalize("NFKC", text or "")
     return re.sub(r"\s+", "", t)
+
+
+def norm_sp(text: str) -> str:
+    """全角→半角、空白は1つに畳む（表の数字を区切るために残す）。"""
+    t = unicodedata.normalize("NFKC", text or "")
+    return re.sub(r"\s+", " ", t)
+
+
+def _signed(x: str) -> float:
+    x = x.replace(" ", "")
+    neg = x[:1] in "△▲-－‐"
+    v = float(x.lstrip("△▲-－‐"))
+    return -v if neg else v
 
 
 def tdnet_code(code5: str) -> str:
@@ -84,7 +111,10 @@ def _ratio(body: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
-def judge_buyback(code: str, title: str, body: str, min_pct: float = 5.0) -> Verdict | None:
+def judge_buyback(code: str, title: str, body: str, min_pct: float = 5.0,
+                  issued_shares: float | None = None, cap_yen: float | None = None) -> Verdict | None:
+    """自己株式取得。割合が本文に無ければ、上限株数÷発行済株式数（本文→CSV→時価総額÷株価の順）、
+    それも無ければ 上限金額÷時価総額 で推定する。推定できなければ「確認中」で出す（後追いで埋める）。"""
     t = norm(title)
     if not BUYBACK_TITLE.search(t) or BUYBACK_SKIP.search(t):
         return None
@@ -92,20 +122,30 @@ def judge_buyback(code: str, title: str, body: str, min_pct: float = 5.0) -> Ver
     pct = _ratio(b)
     sh = SHARES_NEAR.search(b)
     am = AMOUNT_NEAR.search(b)
+    amount_yen = None
     amount = ""
     if am:
         n = float(am.group(1).replace(",", ""))
         unit = am.group(2)
-        oku = n / 100 if unit == "百万円" else (n if unit == "億円" else n / 1e8)
-        amount = f"、上限 {oku:,.0f}億円"
-    shares = f"、上限 {int(sh.group(1).replace(',', '')):,}株" if sh else ""
+        amount_yen = n * 1e6 if unit == "百万円" else (n * 1e8 if unit == "億円" else n)
+        amount = f"、上限 {amount_yen / 1e8:,.0f}億円"
+    shares_n = int(sh.group(1).replace(",", "")) if sh else None
+    shares = f"、上限 {shares_n:,}株" if shares_n else ""
+    how = ""
+    if pct is None:
+        iss = ISSUED_NEAR.search(b)
+        issued = float(iss.group(1).replace(",", "")) if iss else issued_shares
+        if shares_n and issued:
+            pct, how = shares_n / issued * 100, "（推定：上限株数÷発行済）"
+        elif amount_yen and cap_yen:
+            pct, how = amount_yen / cap_yen * 100, "（推定：上限金額÷時価総額）"
     if pct is None:
         return Verdict("自己株取得", False, code,
-                       f"自己株式取得（割合はPDF参照{shares}{amount}）", {"pct": None})
+                       f"自己株式取得 割合 確認中{shares}{amount}", {"pct": None, "shares": shares_n, "amount_yen": amount_yen})
     buy = pct >= min_pct
     return Verdict("自己株取得", buy, code,
-                   f"自己株式取得 発行済の {pct:.1f}%{shares}{amount}" + ("  → 買い" if buy else f"（{min_pct:.0f}%未満）"),
-                   {"pct": pct})
+                   f"自己株式取得 発行済の {pct:.1f}%{how}{shares}{amount}" + ("  → 買い" if buy else f"（{min_pct:.0f}%未満）"),
+                   {"pct": pct, "shares": shares_n, "amount_yen": amount_yen, "estimated": bool(how)})
 
 
 def judge_partner(code: str, title: str, body: str, big: BigCaps, cap_yen: float | None,
@@ -139,13 +179,58 @@ def judge_partner(code: str, title: str, body: str, big: BigCaps, cap_yen: float
                    {"partner": partner, "cap_yen": cap_yen})
 
 
+def judge_revision(code: str, title: str, body: str, min_pct: float = 20.0) -> Verdict | None:
+    """業績予想の修正。「増減率」の行から営業利益（2列目。列が2つ以下なら最後）の増減率を読む。"""
+    t = norm(title)
+    if not REVISION_TITLE.search(t):
+        return None
+    if REVISION_SKIP.search(t) and "上方" not in t:
+        return Verdict("業績修正", False, code, "業績予想の下方修正", {"rate": None, "down": True})
+    b = norm_sp(body)
+    m = REVISION_RATE.search(b)
+    if not m:
+        return Verdict("業績修正", False, code, "業績予想の修正（増減率はPDF参照）", {"rate": None})
+    nums = [_signed(x) for x in re.findall(r"[△▲\-－‐]?\s?[0-9]+(?:\.[0-9]+)?", m.group(1))]
+    op = nums[1] if len(nums) >= 3 else nums[-1]  # 売上高・営業利益・経常・純利益 の並びを想定
+    buy = op >= min_pct
+    cols = "／".join(f"{x:+.1f}%" for x in nums[:4])
+    return Verdict("業績修正", buy, code,
+                   f"業績予想修正 営業利益 {op:+.1f}%（増減率 {cols}）" + ("  → 買い" if buy else f"（+{min_pct:.0f}%未満）"),
+                   {"rate": op, "rates": nums})
+
+
+def judge_yutai(code: str, title: str, body: str, price: float | None, min_yield_pct: float = 4.0,
+                unit_shares: int = 100) -> Verdict | None:
+    """株主優待の新設・拡充。100株あたりの優待額 ÷（株価×100株）＝優待利回り。"""
+    t = norm(title)
+    if not YUTAI_TITLE.search(t) or YUTAI_SKIP.search(t) or not YUTAI_GOOD.search(t):
+        return None
+    b = norm(body)
+    i = b.find(f"{unit_shares}株")
+    seg = b[i: i + 400] if i >= 0 else b
+    m = YUTAI_AMOUNT.search(seg) or YUTAI_AMOUNT.search(b)
+    if not m:
+        return Verdict("株主優待", False, code, "株主優待 新設・拡充（優待額はPDF参照）", {"yield": None})
+    amt = float(m.group(1).replace(",", ""))
+    if not price:
+        return Verdict("株主優待", False, code, f"株主優待 新設・拡充 {unit_shares}株で {amt:,.0f}円相当（株価不明で利回り未算出）",
+                       {"yield": None, "amount": amt})
+    y = amt / (price * unit_shares) * 100
+    buy = y >= min_yield_pct
+    return Verdict("株主優待", buy, code,
+                   f"株主優待 新設・拡充 {unit_shares}株で {amt:,.0f}円相当 ＝ 優待利回り {y:.1f}%（株価 {price:,.0f}円）"
+                   + ("  → 買い" if buy else f"（{min_yield_pct:.0f}%未満）"),
+                   {"yield": y, "amount": amt})
+
+
 def judge(code: str, title: str, body: str, big: BigCaps, cap_yen: float | None,
-          buyback_min_pct: float = 5.0, small_max_oku: float = 300) -> list[Verdict]:
+          buyback_min_pct: float = 5.0, small_max_oku: float = 300, issued_shares: float | None = None,
+          price: float | None = None, revision_min_pct: float = 20.0, yutai_min_yield_pct: float = 4.0) -> list[Verdict]:
     out = []
-    v = judge_buyback(code, title, body, buyback_min_pct)
-    if v:
-        out.append(v)
-    v = judge_partner(code, title, body, big, cap_yen, small_max_oku)
-    if v:
-        out.append(v)
+    for v in (judge_buyback(code, title, body, buyback_min_pct, issued_shares, cap_yen),
+              judge_partner(code, title, body, big, cap_yen, small_max_oku),
+              judge_revision(code, title, body, revision_min_pct),
+              judge_yutai(code, title, body, price, yutai_min_yield_pct)):
+        if v:
+            out.append(v)
     return out

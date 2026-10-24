@@ -36,6 +36,33 @@ def color_key(rule: str, important: bool) -> str:
     return "info"
 
 
+URL_RE = re.compile(r"https?://[^\s　]+")
+
+
+def _insert_with_links(text, body: str, key: str):
+    """本文を先頭に差し込む。URL の部分は青い下線（link タグ）にして、クリックでブラウザが開く。"""
+    pos = 0
+    at = "1.0"
+    for m in URL_RE.finditer(body):
+        text.insert(at, body[pos:m.start()], key)
+        at = text.index(f"{at}+{m.start() - pos}c")
+        text.insert(at, m.group(0), (key, "link"))
+        at = text.index(f"{at}+{len(m.group(0))}c")
+        pos = m.end()
+    text.insert(at, body[pos:], key)
+
+
+def _open_link(text, ev):
+    import webbrowser
+
+    idx = text.index(f"@{ev.x},{ev.y}")
+    rng = text.tag_prevrange("link", f"{idx}+1c")
+    if rng:
+        url = text.get(*rng)
+        if url:
+            webbrowser.open(url)
+
+
 class AlertFeed:
     def __init__(self, max_items: int = 300):
         self.q: queue.Queue = queue.Queue()
@@ -71,6 +98,10 @@ class AlertFeed:
         for key, (bg, fg) in COLORS.items():
             text.tag_configure(key, background=bg, foreground=fg, spacing1=4, spacing3=4)
         text.tag_configure("sep", foreground="#444444")
+        text.tag_configure("link", foreground="#6fb3ff", underline=True)
+        text.tag_bind("link", "<Button-1>", lambda ev: _open_link(text, ev))
+        text.tag_bind("link", "<Enter>", lambda ev: text.configure(cursor="hand2"))
+        text.tag_bind("link", "<Leave>", lambda ev: text.configure(cursor=""))
         text.configure(state="disabled")
         count = [0]
 
@@ -81,7 +112,7 @@ class AlertFeed:
                     text.configure(state="normal")
                     text.insert("1.0", "─" * 40 + "\n", "sep")
                     body = msg if re.match(r"\d{2}:\d{2}:\d{2}", msg) else f"{ts:%H:%M:%S} {msg}"
-                    text.insert("1.0", body + "\n", key)
+                    _insert_with_links(text, body + "\n", key)
                     count[0] += 1
                     if count[0] > self.max_items:  # 古いものを消す
                         text.delete(f"{self.max_items * 8}.0", "end")
