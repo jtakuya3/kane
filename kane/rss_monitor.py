@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from .config import Config, apply_baseline
 from .engine import Engine
-from .rss import SCAN_SHEET, WATCH_SHEET, ExcelRss, RssError, load_universe, row_to_snapshot, scan_fields, watch_fields
+from .rss import SCAN_SHEET, WATCH_SHEET, ExcelRss, RssError, load_universe, row_to_snapshot, scan_fields, select_scan, watch_fields
 from .sinks import Notifier, Recorder
 
 log = logging.getLogger("kane")
@@ -36,9 +36,20 @@ class RssMonitor:
         self.muted = {s.code for s in cfg.symbols if s.mute}
         self.watch = [s for s in cfg.symbols if not s.mute]
         self.pinned = {s.code for s in self.watch}
-        self.scan = load_universe(cfg.base_dir / r.universe_csv, self.pinned | self.muted, r.max_scan)
-        for s_ in self.scan:
+        universe = load_universe(cfg.base_dir / r.universe_csv, self.pinned | self.muted, 100_000)
+        for s_ in universe:
             apply_baseline(s_, cfg.baseline)
+        # 楽天RSSは1口座で合計 rss_symbol_limit（500）銘柄まで。超えた分は「表示銘柄数超過」で値が来ない
+        room = max(0, r.rss_symbol_limit - len(self.watch) - r.rss_reserve)
+        n_scan = min(r.max_scan, room)
+        self.scan = select_scan(universe, n_scan)
+        if len(universe) > len(self.scan):
+            lo = min((s_.avg_vol * s_.last_close for s_ in self.scan if s_.avg_vol and s_.last_close), default=None)
+            log.info("スキャンは universe %d銘柄のうち平均売買代金の大きい %d銘柄（RSS上限%d − 固定%d − 予備%d）%s",
+                     len(universe), len(self.scan), r.rss_symbol_limit, len(self.watch), r.rss_reserve,
+                     f"、最小 約{lo / 1e6:,.0f}百万円/日" if lo else "、baseline に終値が無いので平均出来高順（night.bat で更新）")
+        self.over_limit = 0
+        self.over_logged = 0.0
         self.wf, self.sf = watch_fields(r), scan_fields(r)
         self.engine = Engine(self.watch + self.scan, cfg.rules, on_bar=self.recorder.bar)
         self.infos = {s.code: s for s in self.watch + self.scan}
@@ -128,6 +139,8 @@ class RssMonitor:
                     info.ytd_high = extra["ytd_high"]
                 self.ytd_done.add(info.code)
             if snap is None:
+                if extra.get("over_limit"):
+                    self.over_limit += 1
                 continue
             snaps[info.code] = snap
             self.prices[info.code] = snap.price
@@ -140,6 +153,12 @@ class RssMonitor:
     def poll(self):
         """スキャン銘柄（全銘柄）を1回読む。固定銘柄は poll_watch が別スレッドで読む。"""
         now = datetime.now()
+        if self.over_limit and time.monotonic() - self.over_logged > 300:
+            log.warning("「表示銘柄数超過」のセルが %d 個：楽天RSSの銘柄数上限（%d）を超えています。"
+                        "回転率いま（floats）や他のExcelを閉じるか、max_scan を下げてください",
+                        self.over_limit, self.cfg.rss.rss_symbol_limit)
+            self.over_logged = time.monotonic()
+        self.over_limit = 0
         snaps, alerts = {}, []
         if self.scan:
             rows = self.rss.read(SCAN_SHEET, len(self.scan), len(self.sf))

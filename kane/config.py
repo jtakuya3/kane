@@ -122,7 +122,9 @@ class RssConfig:
     code_suffix: str = ".T"  # RssMarket に渡す銘柄コードの末尾（東証）
     board_levels: int = 10  # 固定監視銘柄で読む板の本数（0なら板を読まない）
     universe_csv: str = "universe.csv"  # 全体スキャン用の銘柄一覧（code,name）
-    max_scan: int = 600
+    max_scan: int = 420  # 楽天RSSは1口座で合計500銘柄まで（超えた分は「表示銘柄数超過」）。固定＋予備を引いた数
+    rss_symbol_limit: int = 500
+    rss_reserve: int = 40  # 回転率いま（floats）や baseline --check が同時に使う分
     # スキャン銘柄で通知するルール（固定銘柄は全ルール）
     scan_rules: list = field(default_factory=lambda: ["R2", "R3", "R4", "R10", "R14", "R15"])
     scan_min_value_yen: float = 100_000_000  # スキャン銘柄は売買代金がこれ未満なら通知しない
@@ -152,6 +154,7 @@ class SymbolInfo:
     avg_vol: float | None = None  # 過去60営業日の平均日出来高（baseline.csv）
     ytd_max_vol: float | None = None  # 今年の最大日出来高（前日まで）
     ytd_max_date: str = ""
+    last_close: float | None = None  # 直近の終値（baseline）。スキャン銘柄の選別（平均売買代金）に使う
     loan: str = ""  # 貸借区分：1＝貸借銘柄（空売り可）、0＝信用銘柄（制度信用の売りなし）、空＝未確認
     mute: bool = False  # 1 なら通知しない（浮動株の一覧には残す）
 
@@ -198,7 +201,8 @@ def load_baseline(data_dir: Path) -> dict:
                 if code:
                     out[code] = {"avg_vol": num("avg_vol"), "ytd_max_vol": num("ytd_max_vol"),
                                  "ytd_max_date": (r.get("ytd_max_date") or "").strip(),
-                                 "last_date": (r.get("last_date") or "").strip()}
+                                 "last_date": (r.get("last_date") or "").strip(),
+                                 "last_close": num("last_close")}
     return _drop_stale(out)
 
 
@@ -232,6 +236,7 @@ def apply_baseline(info: "SymbolInfo", baseline: dict) -> "SymbolInfo":
     info.avg_vol = b.get("avg_vol")
     info.ytd_max_vol = b.get("ytd_max_vol")
     info.ytd_max_date = b.get("ytd_max_date", "")
+    info.last_close = b.get("last_close")
     return info
 
 

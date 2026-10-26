@@ -110,9 +110,11 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
             for j, c in enumerate(part):
                 if c not in pending:
                     continue
-                rows = parse_chart_rows([r[j * BLOCK:(j + 1) * BLOCK] for r in table])
+                block = [r[j * BLOCK:(j + 1) * BLOCK] for r in table]
+                rows = parse_chart_rows(block)
                 if chart_complete(rows, seen_n.get(c)):
-                    out[c] = rows
+                    closes = dict(parse_chart_rows(block, column="終値"))
+                    out[c] = [(d, v, closes.get(d)) for d, v in rows]  # (日付, 出来高, 終値)
                     pending.discard(c)
                     last = time.time()
                 seen_n[c] = len(rows)
@@ -126,14 +128,15 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
     return out
 
 
-def summarize_rows(rows: list[tuple[str, float]], year: int | None = None) -> dict:
-    """平均日出来高（直近60日）と、今年の最大日出来高とその日付。"""
-    vols = [v for _, v in rows][-60:]
+def summarize_rows(rows: list[tuple], year: int | None = None) -> dict:
+    """平均日出来高（直近60日）と、今年の最大日出来高とその日付、直近の終値。rows は (日付, 出来高[, 終値])。"""
+    vols = [r[1] for r in rows][-60:]
     y = str(year or date.today().year)
-    this_year = [(v, d) for d, v in rows if d.startswith(y)]
+    this_year = [(r[1], r[0]) for r in rows if r[0].startswith(y)]
     mx = max(this_year) if this_year else (None, "")
+    close = next((r[2] for r in reversed(rows) if len(r) > 2 and r[2]), None)
     return {"avg_vol": round(sum(vols) / len(vols)) if vols else None, "days": len(vols),
-            "ytd_max_vol": round(mx[0]) if mx[0] else None, "ytd_max_date": mx[1]}
+            "ytd_max_vol": round(mx[0]) if mx[0] else None, "ytd_max_date": mx[1], "last_close": close}
 
 
 def write_baseline(path: Path, data: dict):
@@ -142,7 +145,7 @@ def write_baseline(path: Path, data: dict):
     if path.exists():
         with open(path, encoding="utf-8-sig", newline="") as f:
             keep = {r["code"]: r for r in csv.DictReader(f) if r.get("code") and r["code"] not in data}
-    cols = ["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated", "last_date"]
+    cols = ["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated", "last_date", "last_close"]
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
@@ -150,7 +153,7 @@ def write_baseline(path: Path, data: dict):
         for c, rows in sorted(data.items()):
             r = summarize_rows(rows)
             w.writerow([c, r["avg_vol"], r["days"], r["ytd_max_vol"], r["ytd_max_date"], date.today().isoformat(),
-                        rows[-1][0] if rows else ""])
+                        rows[-1][0] if rows else "", r["last_close"] or ""])
         for c, r in sorted(keep.items()):
             w.writerow([r.get(k, "") for k in cols])
     tmp.replace(path)

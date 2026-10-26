@@ -74,6 +74,7 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
     extra = {"ytd_high": val.get("ytd_high"), "cap": val.get("cap")}  # cap＝時価総額（RSSの単位のまま）
     price = val.get("price")
     if not price:
+        extra["over_limit"] = "超過" in str(raw.get("price") or "")  # 楽天RSSの銘柄数上限（500）を超えた
         return None, extra  # 寄り前・データ未着
 
     def levels(side: str):
@@ -111,6 +112,23 @@ def row_to_snapshot(code: str, fields: list[tuple[str, str]], row, ts: datetime,
         mkt_buy=val.get("mkt_buy"), mkt_sell=val.get("mkt_sell"),
     )
     return snap, extra
+
+
+def select_scan(universe: list[SymbolInfo], n: int) -> list[SymbolInfo]:
+    """スキャン銘柄を n 個に絞る。平均売買代金（平均出来高×直近終値、baseline）が大きい順。
+    baseline の無い銘柄は後ろ。n 以下なら全部。元の並び（コード順）は、選んだあとに戻す。"""
+    if len(universe) <= n:
+        return universe
+
+    def key(s):
+        if s.avg_vol and s.last_close:
+            return (0, -(s.avg_vol * s.last_close))
+        if s.avg_vol:
+            return (1, -s.avg_vol)
+        return (2, 0)
+
+    chosen = {s.code for s in sorted(universe, key=key)[:n]}
+    return [s for s in universe if s.code in chosen]
 
 
 def load_universe(path: Path, exclude: set[str], limit: int) -> list[SymbolInfo]:
