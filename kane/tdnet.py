@@ -95,7 +95,7 @@ def decode(body: bytes) -> str:
     return body.decode("utf-8", errors="replace")
 
 
-def pdf_text(data: bytes, max_pages: int = 3) -> str:
+def pdf_text(data: bytes, max_pages: int = 6) -> str:
     """PDF の先頭数ページの文字。pypdf が無い／画像だけなら空文字。"""
     try:
         from io import BytesIO
