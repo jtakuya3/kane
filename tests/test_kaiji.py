@@ -5,15 +5,27 @@ from kane.kaiji import BigCaps, judge, judge_buyback, judge_partner, norm, tdnet
 from kane.tdnet import TdnetWatcher, page_count, parse_list
 
 LIST_HTML = """
-<table><tr><th>時刻</th></tr>
-<tr><td class="kjTime">09:30</td><td class="kjCode">44980</td><td class="kjName">サイバートラスト</td>
-<td class="kjTitle"><a href="081220261024512345.pdf" target="_blank">業績予想の修正に関するお知らせ</a></td>
-<td class="kjXbrl"></td><td class="kjPlace">東</td><td class="kjHistroy"></td></tr>
-<tr><td class="kjTime">09:00</td><td class="kjCode">338A0</td><td class="kjName">ゼンムテック</td>
-<td class="kjTitle"><a href="./081220261024512300.pdf">自己株式の取得に係る事項の決定に関するお知らせ</a></td>
-<td class="kjXbrl"></td><td class="kjPlace">東</td><td class="kjHistroy"></td></tr>
+<table border="0" id="main-list-table">
+<tr>
+<td class="oddnew-L kjTime" noWrap>09:30</td>
+<td class="oddnew-M kjCode" noWrap>44980</td>
+<td class="oddnew-M kjName" noWrap>サイバートラスト   </td>
+<td class="oddnew-M kjTitle" align="left"><a href="081220261024512345.pdf" target="_blank">業績予想の修正に関するお知らせ</a></td>
+<td class="oddnew-M kjXbrl" noWrap align="center"> </td>
+<td class="oddnew-M kjPlace" noWrap align="left">東                           </td>
+<td class="oddnew-R kjHistroy" align="left">　　　　　</td>
+</tr>
+<tr>
+<td class="evennew-L kjTime" noWrap>09:00</td>
+<td class="evennew-M kjCode" noWrap>338A0</td>
+<td class="evennew-M kjName" noWrap>ゼンムテック</td>
+<td class="evennew-M kjTitle" align="left"><a href="./081220261024512300.pdf">自己株式の取得に係る事項の決定に関するお知らせ</a></td>
+<td class="evennew-M kjXbrl"></td><td class="evennew-M kjPlace">東</td><td class="evennew-R kjHistroy"></td>
+</tr>
 </table>
-<div class="pager"><a href="I_list_001_20261024.html">1</a> <a href="I_list_002_20261024.html">2</a> <a href="I_list_003_20261024.html">3</a></div>
+<div class="pager-O" onClick="pagerLink('I_list_001_20261024.html')">1</div>
+<div class="pager-M" onClick="pagerLink('I_list_002_20261024.html')">2</div>
+<div class="pager-M" onClick="pagerLink('I_list_003_20261024.html')">3</div>
 """
 
 
@@ -24,7 +36,7 @@ def test_tdnet_code_strips_trailing_zero():
 def test_parse_list_and_pages():
     items = parse_list(LIST_HTML)
     assert [d.code for d in items] == ["4498", "338A"]
-    assert items[0].time == "09:30" and items[0].title == "業績予想の修正に関するお知らせ"
+    assert items[0].time == "09:30" and items[0].title == "業績予想の修正に関するお知らせ" and items[0].name == "サイバートラスト"
     assert items[0].pdf == "https://www.release.tdnet.info/inbs/081220261024512345.pdf"
     assert items[1].pdf.endswith("/081220261024512300.pdf")
     assert page_count(LIST_HTML) == 3 and page_count("<html></html>") == 1
@@ -37,10 +49,10 @@ def test_watcher_primes_on_first_poll_and_persists(tmp_path, monkeypatch):
     w = TdnetWatcher(tmp_path)
     now = datetime(2026, 10, 24, 9, 31)
     assert w.poll(now) == []  # 起動時の既出分は通知しない
-    pages.append(LIST_HTML.replace('<tr><td class="kjTime">09:30</td>',
-                                   '<tr><td class="kjTime">09:35</td><td class="kjCode">40470</td><td class="kjName">関東電化</td>'
-                                   '<td class="kjTitle"><a href="new.pdf">資本業務提携のお知らせ</a></td></tr>'
-                                   '<tr><td class="kjTime">09:30</td>'))
+    pages.append(LIST_HTML.replace('<tr>\n<td class="oddnew-L kjTime" noWrap>09:30</td>',
+                                   '<tr><td class="oddnew-L kjTime">09:35</td><td class="oddnew-M kjCode">40470</td><td class="oddnew-M kjName">関東電化</td>'
+                                   '<td class="oddnew-M kjTitle"><a href="new.pdf">資本業務提携のお知らせ</a></td></tr>'
+                                   '<tr>\n<td class="oddnew-L kjTime" noWrap>09:30</td>'))
     new = w.poll(now)
     assert [d.code for d in new] == ["4047"]
     assert w.poll(now) == []  # 同じものは二度と出ない

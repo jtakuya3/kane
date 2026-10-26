@@ -42,7 +42,8 @@ def list_url(day: date, page: int = 1) -> str:
 
 
 _ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
-_CELL = re.compile(r"<td[^>]*class=\"?(kj\w+)\"?[^>]*>(.*?)</td>", re.S | re.I)
+# 実物は <td class="oddnew-L kjTime" noWrap>14:00</td> のように class が複数（偶奇の色＋kjXxx）
+_CELL = re.compile(r"<td[^>]*class=\"[^\"]*\b(kj\w+)\b[^\"]*\"[^>]*>(.*?)</td>", re.S | re.I)
 _HREF = re.compile(r"href=\"([^\"]+\.pdf)\"", re.I)
 _TAG = re.compile(r"<[^>]+>")
 _PAGER = re.compile(r"I_list_(\d{3})_\d{8}\.html")
