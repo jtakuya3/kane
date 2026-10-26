@@ -94,12 +94,26 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
     for k in range(0, len(codes), batch):
         part = codes[k:k + batch]
         com_retry(lambda: ws.Cells.Clear())
+        bad = []
         for j, c in enumerate(part):
             def put(j=j, c=c):
                 ws.Cells(1, 1 + j * BLOCK).Formula = chart_formula(c, bars, cfg.rss.code_suffix)
-            com_retry(put)
+            ok = False
+            for attempt in range(5):  # Excel が一時的に式を受け付けない（0x800A03EC）ことがある → 少し待って再試行
+                try:
+                    com_retry(put)
+                    ok = True
+                    break
+                except Exception as e:
+                    time.sleep(1.0 + attempt)
+                    err = e
+            if not ok:
+                print(f"  {c}: 式を書き込めません（{err}）→ この銘柄は飛ばします")
+                bad.append(c)
+        if len(bad) == len(part):
+            continue
         t0 = last = time.time()
-        pending = set(part)
+        pending = set(part) - set(bad)
         seen_n: dict[str, int] = {}  # 前回の読み取りで何行あったか（増えなくなったら出そろい）
         while pending and time.time() - t0 < wait:
             if len(pending) < len(part) and time.time() - last > stall:
