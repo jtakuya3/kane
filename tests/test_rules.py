@@ -367,3 +367,19 @@ def test_rvol_ignored_when_baseline_broken():
     e2 = Engine([bad], RuleConfig(volume_profile=FLAT))
     a = run(e2, [Snapshot(T0 + timedelta(minutes=30), "X", 1000, 600000)])
     assert not rules_of(a, "R15")
+
+
+def test_r17_not_fired_at_limit_up():
+    """ストップ高の張り付き（特別買い気配が制限値幅の上限）は R17 を出さない（R14 が見る）。"""
+    from kane.models import Snapshot
+    from kane.rules import upper_limit
+    e = eng(float_shares=None)
+    prev = 2000.0
+    up = upper_limit(prev)
+    def sp(sec, bid, sign):
+        return Snapshot(T0.replace(minute=30) + timedelta(seconds=sec), "TEST", bid, 10000, prev_close=prev,
+                        bid=bid, ask=None, buy1_qty=5000, sell1_qty=0, buy1_sign=sign, sell1_sign="")
+    a = run(e, [sp(0, 2100, ""), sp(1, up, "0102")])
+    assert not rules_of(a, "R17")
+    a = run(e, [sp(2, 2150, "0102")])
+    assert [x.level for x in rules_of(a, "R17")] == ["特買"]  # 上限未満の特買いは出す

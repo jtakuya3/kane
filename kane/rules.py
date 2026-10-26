@@ -571,6 +571,10 @@ def r17_special_quote(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Ale
     if s.buy1_sign is None and s.sell1_sign is None:
         return []  # フラグの項目が無い
     side = "買い" if s.buy1_sign == SPECIAL_SIGN else ("売り" if s.sell1_sign == SPECIAL_SIGN else None)
+    if side == "買い" and s.bid and s.prev_close:
+        up = st.upper or upper_limit(s.prev_close)
+        if up and s.bid >= up:
+            side = None  # ストップ高の張り付きは R14 が見る（特買いとしては出さない）
     v = st.vars
     prev = v.get("r17_side")
     if side == prev:

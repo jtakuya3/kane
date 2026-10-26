@@ -77,7 +77,8 @@ class Notifier:
         """popup=True は重要な通知（アラート窓で赤く強調、dialog 設定時はメッセージボックスも）。
         ts は「起こった時刻」（板・値を読み取った時刻）。表示の時刻はこれを使い、表示した時刻ではない。"""
         ts = ts or datetime.now()
-        print(f"{ts:%H:%M:%S} {text}", flush=True)
+        import re as _re
+        print(text if _re.match(r"\d{2}:\d{2}:\d{2}", text) else f"{ts:%H:%M:%S} {text}", flush=True)
         if self.quiet_after and datetime.now().time() >= self.quiet_after and not rule.startswith(self.quiet_except):
             return  # 15:25以降は出さない。ただし quiet_except（引けオークション・開示）は例外
         if self.feed:
