@@ -9,10 +9,12 @@ set EXTRA=3909 6721 4382 4616 5018
 for /f "tokens=1-3 delims=/ " %%a in ("%date%") do set D=%%a%%b%%c
 set OUT=..\kane_data\night_%D%.txt
 git pull
-%PY% -m kane.baseline daily
+echo ---- baseline（平均出来高・年初来最大・終値）---- > "%OUT%"
+%PY% -m kane.baseline daily >> "%OUT%" 2>&1
+type "%OUT%"
 echo.
-echo ---- 固定監視銘柄の乖離ライン（30%%・20%%・15%%）----
-%PY% -m kane.line_watch > "%OUT%"
+echo ---- 固定監視銘柄の乖離ライン（30%%・20%%・15%%）---- >> "%OUT%"
+%PY% -m kane.line_watch >> "%OUT%"
 if not "%EXTRA%"=="" (
   echo ---- 追加銘柄 %EXTRA% ---- >> "%OUT%"
   %PY% -m kane.line %EXTRA% >> "%OUT%"
