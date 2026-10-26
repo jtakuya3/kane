@@ -187,3 +187,27 @@ def test_feed_inserts_links_as_tagged_segments():
     _insert_with_links(t, body, "important")
     assert t.buf == body
     assert ("https://www.release.tdnet.info/inbs/a.pdf", ("important", "link")) in t.tags
+
+
+def test_tob_by_small_acquirer_targets_the_acquired_company():
+    """イクヨ（7273）がムラキ（7477）にTOB → 買われる側 7477 を買い。相手が大手でなくても出す。"""
+    from kane.kaiji import judge_tob
+    title = "ムラキ株式会社（証券コード：7477）に対する公開買付けの開始予定に関するお知らせ"
+    body = "当社は、ムラキ株式会社の普通株式を公開買付けにより取得します。買付け等の価格 普通株式1株につき 1,500円"
+    prices = {"7477": 1000.0}
+    v = judge_tob("7273", title, body, prices.get)
+    assert v and v.buy and v.code == "7477" and v.detail["tob_price"] == 1500 and "+50%" in v.summary
+    vs = judge("7273", title, body, BIG, 50e8, price_of=prices.get)
+    assert [x.kind for x in vs] == ["TOB"] and vs[0].code == "7477"  # 提携判定とは二重に出ない
+
+
+def test_tob_opinion_by_target_and_skips():
+    from kane.kaiji import judge_tob
+    v = judge_tob("7477", "イクヨ株式会社による当社株式に対する公開買付けに関する賛同の意見表明及び応募推奨のお知らせ",
+                  "買付け等の価格 1株 1,500円", {"7477": 1200.0}.get)
+    assert v and v.buy and v.code == "7477" and "イクヨ" in v.summary
+    assert judge_tob("7273", "公開買付けの結果に関するお知らせ", "", None) is None
+    assert judge_tob("7273", "自己株式の公開買付けに関するお知らせ", "", None) is None
+    v = judge_tob("7273", "ムラキ株式会社（証券コード：7477）に対する公開買付けの開始に関するお知らせ",
+                  "買付け等の価格 900円", {"7477": 1000.0}.get)
+    assert v and not v.buy and "ディスカウント" in v.summary

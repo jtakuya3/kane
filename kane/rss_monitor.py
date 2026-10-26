@@ -215,9 +215,15 @@ class RssMonitor:
         cap_txt = f"時価総額 {cap / 1e8:,.0f}億円" if cap else "時価総額 不明"
         for v in verdicts:
             level = "買い" if v.buy else "参考"
-            lines = [f"{ts:%H:%M:%S}", f"{d.code} {name}  {cap_txt}", f"[開示 {d.time}] {d.title}", v.summary,
+            sym = v.code or d.code  # TOB は買われる側の銘柄で出す
+            if sym != d.code:
+                c2 = self.caps.get(sym)
+                head = f"{sym} {self.names.get(sym, '')}  {'時価総額 ' + format(c2 / 1e8, ',.0f') + '億円' if c2 else '時価総額 不明'}（開示は {d.code} {name}）"
+            else:
+                head = f"{d.code} {name}  {cap_txt}"
+            lines = [f"{ts:%H:%M:%S}", head, f"[開示 {d.time}] {d.title}", v.summary,
                      d.pdf, f"（検知まで {elapsed:.1f}秒{note}）"]
-            a = Alert(ts, d.code, "R18", level, "\n".join(lines), self.prices.get(d.code) or 0.0,
+            a = Alert(ts, sym, "R18", level, "\n".join(lines), self.prices.get(sym) or 0.0,
                       {"kind": v.kind, "pdf": d.pdf, "title": d.title, **v.detail})
             with self.lock:
                 self.count += 1
@@ -283,7 +289,7 @@ class RssMonitor:
                     body = pdf_text(pdf) if st == 200 else ""
                     a = self._judge_args(d.code)
                     vs = judge(d.code, d.title, body, big, a["cap_yen"], t.buyback_min_pct, t.small_max_oku,
-                               a["issued_shares"], a["price"], t.yutai_min_yield_pct)
+                               a["issued_shares"], a["price"], t.yutai_min_yield_pct, self.prices.get)
                     if vs:
                         self._tdnet_alert(d, vs, time.monotonic() - t0)
                         if any(v.kind == "自己株取得" and v.detail.get("pct") is None for v in vs):

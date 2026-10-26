@@ -35,6 +35,13 @@ YUTAI_GOOD = re.compile(r"新設|導入|拡充|拡大|増額|開始|変更")
 YUTAI_SKIP = re.compile(r"廃止|縮小|中止|終了|一時停止")
 YUTAI_AMOUNT = re.compile(r"([0-9,]{3,7})\s*円\s*(分|相当|の|分の)")  # 「QUOカード 1,000円分」「3,000円相当」
 
+# 公開買付け（TOB）：買われる側（対象者）の株は TOB 価格まで跳ぶ
+TOB_TITLE = re.compile(r"公開買付け?の(開始|実施)|公開買付け?に関する(お知らせ|意見表明|賛同)|株式等に対する公開買付")
+TOB_SKIP = re.compile(r"結果|終了|変更|訂正|延長|撤回|自己株式")
+TOB_TARGET_CODE = re.compile(r"(?:証券コード|コード)[：:]?\s*([0-9]{4}|[0-9]{3}[A-Z])")
+TOB_PRICE = re.compile(r"買付け?(?:等の)?価格.{0,60}?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{3,8})円")  # 「買付け等の価格 1株につき 1,500円」
+TOB_BY = re.compile(r"(.{2,30}?)(?:株式会社|\(株\)|（株）)?による当社")  # 意見表明：「○○による当社株式に対する…」
+
 
 def norm(text: str) -> str:
     """全角→半角、空白を全部消す（pypdf は日本語の間に空白を入れることがある）。"""
@@ -198,13 +205,43 @@ def judge_yutai(code: str, title: str, body: str, price: float | None, min_yield
                    {"yield": y, "amount": amt})
 
 
+def judge_tob(code: str, title: str, body: str, price_of=None) -> Verdict | None:
+    """公開買付け（TOB）。買う側の開示なら表題・本文の「証券コード：7477」から対象者を拾い、対象者を買い。
+    対象者自身の意見表明（賛同）なら、その対象者＝開示した会社を買い。買付価格と現在値からプレミアムを出す。"""
+    t = norm(title)
+    if not TOB_TITLE.search(t) or TOB_SKIP.search(t):
+        return None
+    b = norm(body)
+    m = TOB_TARGET_CODE.search(t) or TOB_TARGET_CODE.search(b[:1500])
+    target = m.group(1) if m else None
+    by = TOB_BY.search(t)
+    if "当社株式" in t or "当社株券" in t or by:
+        target = code  # 対象者（買われる側）自身の開示
+    if not target or target == code and not ("当社株式" in t or "当社株券" in t or by):
+        return None
+    pm = TOB_PRICE.search(b)
+    tob_price = float(pm.group(1).replace(",", "")) if pm else None
+    cur = price_of(target) if price_of else None
+    prem = f"、プレミアム {(tob_price / cur - 1):+.0%}（現在値 {cur:,.0f}円）" if tob_price and cur else ""
+    if tob_price and cur and tob_price <= cur:
+        return Verdict("TOB", False, target, f"公開買付け 買付価格 {tob_price:,.0f}円 は現在値以下（ディスカウントTOB）", 
+                       {"tob_price": tob_price, "target": target})
+    who = f"{by.group(1)} による" if by else (f"{code} による" if target != code else "")
+    px = f"買付価格 {tob_price:,.0f}円" if tob_price else "買付価格はPDF参照"
+    return Verdict("TOB", True, target,
+                   f"{who}公開買付け（対象 {target}）{px}{prem}  → 対象者を買い",
+                   {"tob_price": tob_price, "target": target, "acquirer": code if target != code else None})
+
+
 def judge(code: str, title: str, body: str, big: BigCaps, cap_yen: float | None,
           buyback_min_pct: float = 5.0, small_max_oku: float = 300, issued_shares: float | None = None,
-          price: float | None = None, yutai_min_yield_pct: float = 4.0) -> list[Verdict]:
+          price: float | None = None, yutai_min_yield_pct: float = 4.0, price_of=None) -> list[Verdict]:
     out = []
+    tob = judge_tob(code, title, body, price_of)
     for v in (judge_buyback(code, title, body, buyback_min_pct, issued_shares, cap_yen),
-              judge_partner(code, title, body, big, cap_yen, small_max_oku),
-              judge_yutai(code, title, body, price, yutai_min_yield_pct)):
+              None if tob else judge_partner(code, title, body, big, cap_yen, small_max_oku),  # TOB は提携より優先
+              judge_yutai(code, title, body, price, yutai_min_yield_pct),
+              tob):
         if v:
             out.append(v)
     return out
