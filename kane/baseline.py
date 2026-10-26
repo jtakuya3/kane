@@ -63,6 +63,21 @@ def parse_chart_rows(table, today: date | None = None, column: str = "出来高"
 
 
 MIN_DAYS = 5  # 上場まもない銘柄（IPO）も、5日分あれば平均を出す
+FRESH_DAYS = 10  # 日足の最後の日付がこれより古ければ「表が途中までしか届いていない」とみなす
+
+
+def chart_complete(rows: list[tuple[str, float]], prev_n: int | None, today: date | None = None) -> bool:
+    """RssChart の表が出そろったか。行数が前回の読み取りから増えておらず、最後の日付が直近であること。
+    （RssChart は古い日から順に埋まるので、途中で読むと「8月までの表」で最大出来高を取り違える）"""
+    if len(rows) < MIN_DAYS or prev_n is None or len(rows) != prev_n:
+        return False
+    today = today or date.today()
+    try:
+        y, m, d = (int(x) for x in rows[-1][0].split("/")[:3])
+        last = date(y, m, d)
+    except (ValueError, IndexError):
+        return False
+    return (today - last).days <= FRESH_DAYS
 BARS = 250  # 約1年分（平均出来高は直近60日、年初来の最大出来高は今年の分から計算）
 
 
@@ -85,6 +100,7 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
             com_retry(put)
         t0 = last = time.time()
         pending = set(part)
+        seen_n: dict[str, int] = {}  # 前回の読み取りで何行あったか（増えなくなったら出そろい）
         while pending and time.time() - t0 < wait:
             if len(pending) < len(part) and time.time() - last > stall:
                 break  # 他の銘柄は取れたのに、残りが stall 秒届かない（上場廃止・コード違いなど）→ 先へ進む
@@ -95,10 +111,11 @@ def fetch_daily(cfg, codes: list[str], bars: int = BARS, batch: int = 40, wait: 
                 if c not in pending:
                     continue
                 rows = parse_chart_rows([r[j * BLOCK:(j + 1) * BLOCK] for r in table])
-                if len(rows) >= MIN_DAYS:
+                if chart_complete(rows, seen_n.get(c)):
                     out[c] = rows
                     pending.discard(c)
                     last = time.time()
+                seen_n[c] = len(rows)
         done = min(k + batch, len(codes))
         el = time.time() - t_all
         print(f"  {done}/{len(codes)} 銘柄（この回で取れなかった {len(pending)}銘柄）"
@@ -125,14 +142,15 @@ def write_baseline(path: Path, data: dict):
     if path.exists():
         with open(path, encoding="utf-8-sig", newline="") as f:
             keep = {r["code"]: r for r in csv.DictReader(f) if r.get("code") and r["code"] not in data}
-    cols = ["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated"]
+    cols = ["code", "avg_vol", "days", "ytd_max_vol", "ytd_max_date", "updated", "last_date"]
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
         for c, rows in sorted(data.items()):
             r = summarize_rows(rows)
-            w.writerow([c, r["avg_vol"], r["days"], r["ytd_max_vol"], r["ytd_max_date"], date.today().isoformat()])
+            w.writerow([c, r["avg_vol"], r["days"], r["ytd_max_vol"], r["ytd_max_date"], date.today().isoformat(),
+                        rows[-1][0] if rows else ""])
         for c, r in sorted(keep.items()):
             w.writerow([r.get(k, "") for k in cols])
     tmp.replace(path)

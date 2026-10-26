@@ -349,3 +349,21 @@ def test_r17_special_sell_quote_flicker_is_quiet():
     a2 = run(e2, [Snapshot(T0.replace(minute=30), "TEST", 500, 10000),
                   Snapshot(T0.replace(minute=31), "TEST", 510, 11000)])
     assert not rules_of(a2, "R17")
+
+
+def test_rvol_ignored_when_baseline_broken():
+    """年初来最大＜平均（日足が途中まで）や RVOL が桁外れの基準では、RVOL も R15 も出さない。"""
+    from kane.rules import baseline_ok, rvol_of
+    from kane.config import SymbolInfo
+    bad = SymbolInfo("X", "x", None, None, avg_vol=50000)
+    bad.ytd_max_vol, bad.ytd_max_date = 23000, "2026/08/31"
+    assert not baseline_ok(bad)
+    tiny = SymbolInfo("Y", "y", None, None, avg_vol=10)
+    assert baseline_ok(tiny)
+    e = Engine([tiny], RuleConfig(volume_profile=FLAT))
+    run(e, [Snapshot(T0 + timedelta(minutes=30), "Y", 1000, 120000)])
+    st = e.states["Y"]
+    assert rvol_of(st, T0 + timedelta(minutes=30), e.rules) is None  # 12,000倍は異常値として捨てる
+    e2 = Engine([bad], RuleConfig(volume_profile=FLAT))
+    a = run(e2, [Snapshot(T0 + timedelta(minutes=30), "X", 1000, 600000)])
+    assert not rules_of(a, "R15")

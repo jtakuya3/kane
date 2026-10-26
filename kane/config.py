@@ -197,8 +197,34 @@ def load_baseline(data_dir: Path) -> dict:
                 code = (r.get("code") or "").strip()
                 if code:
                     out[code] = {"avg_vol": num("avg_vol"), "ytd_max_vol": num("ytd_max_vol"),
-                                 "ytd_max_date": (r.get("ytd_max_date") or "").strip()}
-    return out
+                                 "ytd_max_date": (r.get("ytd_max_date") or "").strip(),
+                                 "last_date": (r.get("last_date") or "").strip()}
+    return _drop_stale(out)
+
+
+def _drop_stale(base: dict, today: "date | None" = None, max_age_days: int = 10) -> dict:
+    """日足の最後の日付（last_date）が古い銘柄は、表が途中までしか届いていなかった可能性が高いので
+    年初来最大出来高を使わない（R15 の誤報を防ぐ）。last_date の無い古い baseline はそのまま。"""
+    from datetime import date as _date
+
+    today = today or _date.today()
+    n = 0
+    for code, b in base.items():
+        ld = b.get("last_date")
+        if not ld:
+            continue
+        try:
+            y, m, d = (int(x) for x in ld.replace("-", "/").split("/")[:3])
+        except ValueError:
+            continue
+        if (today - _date(y, m, d)).days > max_age_days:
+            b["ytd_max_vol"], b["ytd_max_date"] = None, ""
+            n += 1
+    if n:
+        import logging
+
+        logging.getLogger("kane").warning("baseline.csv：日足が途中までしか無い %d銘柄の年初来最大出来高を無効にしました（night.bat で取り直し）", n)
+    return base
 
 
 def apply_baseline(info: "SymbolInfo", baseline: dict) -> "SymbolInfo":

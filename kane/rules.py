@@ -14,6 +14,8 @@ from collections import deque
 from datetime import datetime
 
 from .config import RuleConfig
+import logging
+
 from .models import Alert, Bar, Snapshot
 from .state import SymbolState
 
@@ -23,6 +25,9 @@ def _fmt(x: float | None, pct=False) -> str:
     if x is None:
         return "-"
     return f"{x:+.1%}" if pct else f"{x:,.0f}"
+
+
+log = logging.getLogger("kane")
 
 
 def vol_frac(ts: datetime, profile: list) -> float:
@@ -36,12 +41,32 @@ def vol_frac(ts: datetime, profile: list) -> float:
     return profile[-1][1]
 
 
+RVOL_SANE_MAX = 300.0  # これを超える RVOL は基準データ（平均出来高）の壊れとみなして使わない
+
+
+def ytd_ok(info) -> bool:
+    """年初来最大出来高の整合性：平均出来高より小さい年初来最大はあり得ない（日足が途中までだった印）。"""
+    return not (info.avg_vol and info.ytd_max_vol and info.ytd_max_vol < info.avg_vol)
+
+
+def baseline_ok(info) -> bool:
+    """RVOL に使える基準か：平均出来高があり、年初来最大との整合が取れている。"""
+    return bool(info.avg_vol and info.avg_vol > 0) and ytd_ok(info)
+
+
 def rvol_of(st: SymbolState, ts: datetime, cfg: RuleConfig) -> float | None:
-    """RVOL＝今の累計出来高 ÷（過去60日の平均日出来高 × この時刻までの普段の割合）。"""
-    if not st.last or not st.info.avg_vol:
+    """RVOL＝今の累計出来高 ÷（過去60日の平均日出来高 × この時刻までの普段の割合）。
+    基準が壊れている（年初来最大＜平均、または RVOL が桁外れ）ときは None（通知の条件に使わない）。"""
+    if not st.last or not baseline_ok(st.info):
         return None
     frac = max(vol_frac(ts, cfg.volume_profile), 0.03)  # 寄り直後の暴れを抑える
-    return st.last.volume / (st.info.avg_vol * frac)
+    rv = st.last.volume / (st.info.avg_vol * frac)
+    if rv > RVOL_SANE_MAX:
+        if "rvol_bad" not in st.vars:
+            st.vars["rvol_bad"] = True
+            log.warning("%s RVOL %.0f倍は異常値（平均出来高 %s）。baseline を取り直してください", st.info.code, rv, st.info.avg_vol)
+        return None
+    return rv
 
 
 def vol_line(st: SymbolState, ts: datetime, cfg: RuleConfig) -> str:
@@ -175,8 +200,8 @@ def r15_ytd_volume(st: SymbolState, s: Snapshot, cfg: RuleConfig) -> list[Alert]
     - 年初来更新：当日の出来高が今年の最大日出来高を超えた
     """
     mx = st.info.ytd_max_vol
-    if not mx or not s.volume:
-        return []
+    if not mx or not s.volume or not ytd_ok(st.info):
+        return []  # 年初来最大が平均より小さい＝日足が途中までだった基準は使わない
     out = []
     when = f"（{st.info.ytd_max_date}）" if st.info.ytd_max_date else ""
     vol = f"出来高 {s.volume:,.0f}株 / 今年の最大 {mx:,.0f}株{when}"
