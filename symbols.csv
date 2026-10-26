@@ -31,7 +31,7 @@ code,name,group,float_shares,breakout_vol5m,issued_shares,ytd_high,loan,mute
 # IPO銘柄はここに group=ipo で追加（例）,,
 #000A,IPO銘柄名,ipo,,,,,,
 478A,フツパー,ai,5700000,,10213500,,,
-6232,ACSL,defense,15000000,,19472474,,,
+6232,ACSL,defense,15000000,,19472474,,1,
 6203,豊和工業,defense,10000000,,12548134,,1,
 3444,菊池製作所,defense,5100000,,12337700,,,
 3692,FFRIセキュリティ,security,5900000,,8190000,,1,
