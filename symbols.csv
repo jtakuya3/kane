@@ -30,3 +30,4 @@ code,name,group,float_shares,breakout_vol5m,issued_shares,ytd_high,loan,mute
 3858,ユビキタスAI,ai,8600000,,10458883,,1,
 # IPO銘柄はここに group=ipo で追加（例）,,
 #000A,IPO銘柄名,ipo,,,,,,
+478A,フツパー,ai,5700000,,10213500,,,
