@@ -223,3 +223,28 @@ def test_tob_opinion_by_target_and_skips():
     v = judge_tob("7273", "ムラキ株式会社（証券コード：7477）に対する公開買付けの開始に関するお知らせ",
                   "買付け等の価格 900円", {"7477": 1000.0}.get)
     assert v and not v.buy and "ディスカウント" in v.summary
+
+
+TANSHIN = """
+2027年３月期 第２四半期（中間期）決算短信〔日本基準〕(連結) 2026年10月26日
+上 場 会 社 名 スタンレー電気株式会社 コ ー ド 番 号 6923
+３．2027年３月期の連結業績予想（2026年４月１日～2027年３月31日）
+（％表示は、対前期増減率）
+売上高 営業利益 経常利益 親会社株主に帰属する当期純利益 １株当たり当期純利益
+百万円 ％ 百万円 ％ 百万円 ％ 百万円 ％ 円 銭
+通期 520,000 3.2 48,000 25.5 50,000 24.1 36,000 20.0 240.15
+（注）直近に公表されている業績予想からの修正の有無 ： 有
+（注）直近に公表されている配当予想からの修正の有無 ： 有
+"""
+
+
+def test_tanshin_with_revision_flag_is_flagged_for_review():
+    from kane.kaiji import judge_tanshin
+    v = judge_tanshin("6923", "2027年３月期 第２四半期（中間期）決算短信〔日本基準〕（連結）", TANSHIN)
+    assert v and v.level == "要確認" and v.detail["revised"] and v.detail["dividend_revised"]
+    assert "営業利益 48,000百万円（+25.5%）" in v.summary
+    none = TANSHIN.replace("修正の有無 ： 有", "修正の有無 ： 無")
+    assert judge_tanshin("6923", "決算短信〔日本基準〕（連結）", none) is None
+    assert judge_tanshin("6923", "決算短信の一部訂正について", TANSHIN) is None
+    vs = judge("6923", "2027年３月期 第２四半期決算短信〔日本基準〕（連結）", TANSHIN, BIG, 5000e8)
+    assert [x.kind for x in vs] == ["決算短信"]

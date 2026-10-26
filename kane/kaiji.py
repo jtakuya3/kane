@@ -35,6 +35,14 @@ YUTAI_GOOD = re.compile(r"新設|導入|拡充|拡大|増額|開始|変更")
 YUTAI_SKIP = re.compile(r"廃止|縮小|中止|終了|一時停止")
 YUTAI_AMOUNT = re.compile(r"([0-9,]{3,7})\s*円\s*(分|相当|の|分の)")  # 「QUOカード 1,000円分」「3,000円相当」
 
+# 決算短信：別紙の「修正のお知らせ」を出さずに、短信の中だけで業績予想・配当予想を修正する会社がある
+TANSHIN_TITLE = re.compile(r"決算短信")
+TANSHIN_SKIP = re.compile(r"訂正|補足|説明資料|英訳|English")
+REV_FLAG = re.compile(r"業績予想[^有無]{0,20}?修正の有無[^有無]{0,6}(有|無)")
+DIV_FLAG = re.compile(r"配当予想[^有無]{0,20}?修正の有無[^有無]{0,6}(有|無)")
+# 通期の予想行：「通期 12,000 5.2 1,500 20.3 1,480 19.0 1,000 15.0 80.00」→ 売上高 % 営業利益 % …
+FULL_ROW = re.compile(r"通期\s+([△▲\-－]?[0-9,]+)\s+([△▲\-－]?[0-9]+(?:\.[0-9]+)?)\s+([△▲\-－]?[0-9,]+)\s+([△▲\-－]?[0-9]+(?:\.[0-9]+)?)")
+
 # 公開買付け（TOB）：買われる側（対象者）の株は TOB 価格まで跳ぶ
 TOB_TITLE = re.compile(r"公開買付け?の(開始|実施)|公開買付け?に関する(お知らせ|意見表明|賛同)|株式等に対する公開買付")
 TOB_SKIP = re.compile(r"結果|終了|変更|訂正|延長|撤回|自己株式")
@@ -70,11 +78,12 @@ def tdnet_code(code5: str) -> str:
 
 @dataclass
 class Verdict:
-    kind: str  # "自己株取得" / "大手との提携"
+    kind: str  # "自己株取得" / "大手との提携" / "TOB" / "株主優待" / "決算短信"
     buy: bool
     code: str  # 買い判断の対象（開示した会社）
     summary: str
     detail: dict = field(default_factory=dict)
+    level: str | None = None  # 通知の区分を上書きしたいとき（"要確認" など）。無ければ 買い／参考
 
 
 @dataclass
@@ -205,6 +214,35 @@ def judge_yutai(code: str, title: str, body: str, price: float | None, min_yield
                    {"yield": y, "amount": amt})
 
 
+def judge_tanshin(code: str, title: str, body: str) -> Verdict | None:
+    """決算短信。1ページ目の「業績予想の修正の有無：有」「配当予想の修正の有無：有」を見る。
+    有なら「要確認」として赤で出す（前回予想が短信に載っていないので上方・下方は本文で確認）。
+    通期予想の営業利益と前年比が読めれば添える。無・無なら何も出さない（決算期は1日に数百件ある）。"""
+    t = norm(title)
+    if not TANSHIN_TITLE.search(t) or TANSHIN_SKIP.search(t):
+        return None
+    b = norm_sp(body)
+    head = re.sub(r"\s+", "", b[:4000])
+    rev = REV_FLAG.search(head)
+    div = DIV_FLAG.search(head)
+    rev_on = bool(rev and rev.group(1) == "有")
+    div_on = bool(div and div.group(1) == "有")
+    if not rev_on and not div_on:
+        return None
+    m = FULL_ROW.search(b)
+    op = ""
+    if m:
+        try:
+            sales, sales_pct, opv, op_pct = (_signed(m.group(1).replace(",", "")), _signed(m.group(2)),
+                                             _signed(m.group(3).replace(",", "")), _signed(m.group(4)))
+            op = f"  通期予想 売上高 {sales:,.0f}百万円（前年比 {sales_pct:+.1f}%）営業利益 {opv:,.0f}百万円（{op_pct:+.1f}%）"
+        except ValueError:
+            op = ""
+    what = "・".join(x for x, on in (("業績予想", rev_on), ("配当予想", div_on)) if on)
+    return Verdict("決算短信", False, code, f"決算短信の中で {what} を修正（有）{op}  上方か下方かはPDFで確認",
+                   {"revised": rev_on, "dividend_revised": div_on}, level="要確認")
+
+
 def judge_tob(code: str, title: str, body: str, price_of=None) -> Verdict | None:
     """公開買付け（TOB）。買う側の開示なら表題・本文の「証券コード：7477」から対象者を拾い、対象者を買い。
     対象者自身の意見表明（賛同）なら、その対象者＝開示した会社を買い。買付価格と現在値からプレミアムを出す。"""
@@ -241,6 +279,7 @@ def judge(code: str, title: str, body: str, big: BigCaps, cap_yen: float | None,
     for v in (judge_buyback(code, title, body, buyback_min_pct, issued_shares, cap_yen),
               None if tob else judge_partner(code, title, body, big, cap_yen, small_max_oku),  # TOB は提携より優先
               judge_yutai(code, title, body, price, yutai_min_yield_pct),
+              judge_tanshin(code, title, body),
               tob):
         if v:
             out.append(v)

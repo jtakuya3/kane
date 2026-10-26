@@ -233,7 +233,7 @@ class RssMonitor:
         cap = self.caps.get(d.code)
         cap_txt = f"時価総額 {cap / 1e8:,.0f}億円" if cap else "時価総額 不明"
         for v in verdicts:
-            level = "買い" if v.buy else "参考"
+            level = v.level or ("買い" if v.buy else "参考")
             sym = v.code or d.code  # TOB は買われる側の銘柄で出す
             if sym != d.code:
                 c2 = self.caps.get(sym)
