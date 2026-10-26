@@ -196,9 +196,17 @@ def main():
     page = decode(body)
     items = parse_list(page)
     print(f"ページ数 {page_count(page)} / このページ {len(items)}件")
+    dump = Path("kane_data") / f"tdnet_page_{day:%Y%m%d}.html"
+    try:
+        dump.parent.mkdir(parents=True, exist_ok=True)
+        dump.write_text(page, encoding="utf-8")
+        print(f"ページを保存: {dump.resolve()}")
+    except OSError:
+        pass
     if not items:
-        print("行を読めませんでした。HTMLの形が想定と違います。先頭1000文字:")
-        print(page[:1000])
+        print("行を読めませんでした。HTMLの形が想定と違います。最初の .pdf の前後 1500文字:")
+        i = page.find(".pdf")
+        print(page[max(0, i - 1200): i + 300] if i >= 0 else "（.pdf が見つかりません。開示がまだ無いか、一覧の形が違います）")
         return
     print(f"先頭: {items[0].time} {items[0].code} {items[0].name} {items[0].title}")
     print(f"末尾: {items[-1].time} {items[-1].code} {items[-1].name} {items[-1].title}")
