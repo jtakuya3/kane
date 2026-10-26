@@ -105,8 +105,8 @@ ask_sign = "特別売気配フラグ"   # 特別売気配のとき "S"（R17 特
 # 適時開示（TDnet）を1秒おきに見て、R18 を出す。python -m kane.tdnet --check で動作確認
 enabled = true
 poll_sec = 1.0
-start = "08:00"
-end = "18:30"
+start = "07:00"   # 場中以外（寄り前・引け後）の開示も拾う。TDnet の開示は概ね 7:30〜19:00
+end = "20:00"
 newest_first = true     # 一覧の先頭が最新なら true（--check の「先頭／末尾」で確認）
 buyback_min_pct = 5.0   # 自己株式取得：発行済株式総数の5%以上で買い
 small_max_oku = 300     # 提携：開示した会社の時価総額300億円以下なら小型（買う側）

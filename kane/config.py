@@ -81,8 +81,8 @@ class TdnetConfig:
     """適時開示（TDnet）の見張り（R18）。監視の取引時間とは別の時間帯で動く。"""
     enabled: bool = True
     poll_sec: float = 1.0  # 一覧を見る間隔（秒）
-    start: str = "08:00"  # 見張る時間帯（PTS夜間の材料になる 15:00〜 の開示も拾う）
-    end: str = "18:30"
+    start: str = "07:00"  # 見張る時間帯。場中以外（寄り前・引け後）の開示も拾う
+    end: str = "20:00"
     newest_first: bool = True  # 一覧の先頭が最新か（python -m kane.tdnet --check で確認）
     buyback_min_pct: float = 5.0  # 自己株取得：発行済の何%以上で買い
     small_max_oku: float = 300  # 提携：開示した側の時価総額（億円）がこれ以下なら小型
