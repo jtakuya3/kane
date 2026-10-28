@@ -5,7 +5,7 @@ set PY=python
 where py > nul 2>&1 && set PY=py -3.11
 rem 夜：最新版にして、平均出来高・今年の最大出来高を更新（約30分）→ 乖離ラインを表示
 rem 追加で見たい銘柄は下の EXTRA にスペース区切りで書く（固定監視銘柄は自動）
-set EXTRA=3909 6721 4382 4616 5018
+set EXTRA=5250
 for /f "tokens=1-3 delims=/ " %%a in ("%date%") do set D=%%a%%b%%c
 set OUT=..\kane_data\night_%D%.txt
 git pull
