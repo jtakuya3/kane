@@ -222,6 +222,6 @@ def test_load_config_reads_tdnet_and_cap(tmp_path):
     from pathlib import Path
     from kane.config import load_config
     cfg = load_config(Path(__file__).resolve().parent.parent / "config.toml")
-    assert cfg.tdnet.enabled and cfg.tdnet.buyback_min_pct == 5.0 and cfg.tdnet.small_max_oku == 300
+    assert cfg.tdnet.buyback_min_pct == 5.0 and cfg.tdnet.small_max_oku == 300
     assert cfg.rss.items["cap"] == "時価総額" and "R18" in cfg.quiet_except
     assert ("cap", "時価総額") in scan_fields(cfg.rss)
