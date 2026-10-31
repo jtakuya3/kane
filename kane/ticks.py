@@ -39,6 +39,7 @@ def main():
     print(f"■ {args.code} {name}  {t0:%Y-%m-%d %H:%M:%S} 〜 {t1:%H:%M:%S}")
     print("  時刻(ミリ秒)      約定値   約定株数   累計出来高     売気配(数量)       買気配(数量)     状態")
     prev_v = prev_p = prev_bid = prev_ask = None
+    stamps: list[datetime] = []  # 記録された時刻（値が変わった瞬間）。間隔＝データが更新される速さ
     n_trade = 0
     tot = 0.0
     with open(path, encoding="utf-8", newline="") as fh:
@@ -53,6 +54,7 @@ def main():
                 continue
             if ts > t1:
                 break
+            stamps.append(ts)
             dv = v - prev_v if prev_v is not None else 0.0
             bid, ask = r.get("bid") or "", r.get("ask") or ""
             sign = "特買" if r.get("buy1_sign") == "0102" else ("特売" if r.get("sell1_sign") == "0102" else "")
@@ -72,6 +74,11 @@ def main():
                     tot += dv
             prev_v, prev_p, prev_bid, prev_ask = v, p, bid, ask
     print(f"\n約定のあった更新 {n_trade} 回、合計 {tot:,.0f}株")
+    gaps = sorted((b - a).total_seconds() for a, b in zip(stamps, stamps[1:]) if (b - a).total_seconds() < 10)
+    if gaps:
+        med = gaps[len(gaps) // 2]
+        print(f"値が変わった間隔：中央値 {med:.2f}秒、最短 {gaps[0]:.2f}秒（{len(gaps) + 1}回の記録）"
+              "  ← 約2秒なら楽天RSSの更新間隔が2秒（既定）。RSSの各種設定で1秒にできる")
     print("※ 0.3秒ごとの読み取りなので、同じ0.3秒の中の複数の約定は1行にまとまる")
 
 
