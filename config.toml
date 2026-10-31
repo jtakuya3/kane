@@ -103,7 +103,7 @@ ask_sign = "特別売気配フラグ"   # 特別売気配のとき "S"（R17 特
 
 [tdnet]
 # 適時開示（TDnet）を1秒おきに見て、R18 を出す。python -m kane.tdnet --check で動作確認
-enabled = true
+enabled = false   # R18 適時開示は停止中（ご指示）。再開するときは true
 poll_sec = 1.0
 start = "07:00"   # 場中以外（寄り前・引け後）の開示も拾う。TDnet の開示は概ね 7:30〜19:00
 end = "20:00"

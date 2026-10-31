@@ -121,7 +121,7 @@ class AlertFeed:
                         root.bell()
             except queue.Empty:
                 pass
-            root.after(200, poll)
+            root.after(50, poll)
 
-        root.after(200, poll)
+        root.after(50, poll)
         root.mainloop()
