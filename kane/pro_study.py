@@ -5,6 +5,8 @@
 
 各取引について「買う直前に確定していた日足」で指標を出す（夜・朝の注文はその日の寄りで買ったとみなす）。
 最後に全取引の平均・中央値と、買ったあと（寄り値から）+1日・+5日・+20日の騰落を出す。
+「急落から◯日目」＝買う前5営業日で一番下げた日から数えた日数（1＝翌日の寄り、2＝翌々日の寄り）。
+追証の投げ（急落日に追証が発生 → 2〜3営業日後の寄りで強制決済）を拾ったかを見る。
 信用倍率の過去分は楽天RSSに無いので、ここでは出さない（週次の信用残は株探などで別に見る）。
 """
 from __future__ import annotations
@@ -193,6 +195,9 @@ COLS = [("rsi14", "RSI14", "{:.0f}"), ("rci9", "RCI9", "{:+.0f}"), ("rci26", "RC
         ("ret20", "20日騰落", "{:+.1f}%"), ("from_hi60", "60日高値から", "{:+.1f}%"),
         ("from_hi250", "1年高値から", "{:+.1f}%"), ("down_streak", "連続安", "{:.0f}日"),
         ("vol_x", "出来高倍率", "{:.1f}倍"), ("gap", "寄りの窓", "{:+.1f}%"),
+        ("crash_ret", "急落日の下げ", "{:+.1f}%"), ("crash_day", "急落から", "{:.0f}日目"),
+        ("since_crash", "急落前日から", "{:+.1f}%"), ("day_low_vs_open", "寄り→安値", "{:+.1f}%"),
+        ("day_close_vs_open", "寄り→引け", "{:+.1f}%"),
         ("after1", "+1日", "{:+.1f}%"), ("after5", "+5日", "{:+.1f}%"), ("after20", "+20日", "{:+.1f}%")]
 
 
@@ -225,6 +230,17 @@ def main():
         e = bars[i]
         price = e["open"] if "寄り" in how else e["close"]
         f["gap"] = (e["open"] / bars[i - 1]["close"] - 1) * 100
+        # 急落日：買う前の5営業日で一番下げた日。そこから何日目の寄りで買ったか（追証の投げ仮説）
+        rets = [(bars[k]["close"] / bars[k - 1]["close"] - 1) * 100 for k in range(max(1, i - 5), i)]
+        if rets:
+            worst = min(range(len(rets)), key=lambda k: rets[k])
+            ci = max(1, i - 5) + worst
+            f["crash_ret"] = rets[worst]
+            f["crash_day"] = i - ci  # 1＝急落の翌日、2＝翌々日
+            f["since_crash"] = (bars[i - 1]["close"] / bars[ci - 1]["close"] - 1) * 100
+        # 買った日の値動き：寄りがその日の安値に近いか（寄りの投げを拾えたか）
+        f["day_low_vs_open"] = (e["low"] / e["open"] - 1) * 100
+        f["day_close_vs_open"] = (e["close"] / e["open"] - 1) * 100
         for n in (1, 5, 20):
             f[f"after{n}"] = (bars[i + n]["close"] / price - 1) * 100 if i + n < len(bars) else None
         f.update({"code": code, "name": name, "when": when, "note": note, "day": e["date"], "how": how, "price": price})
